@@ -124,7 +124,14 @@ const FOG=NIGHT_FOG;scene.fog=new THREE.FogExp2(NIGHT_FOG.clone(),0.022);
 const camera=new THREE.PerspectiveCamera(42,1,0.05,400);
 const controls=new OrbitControls(camera,canvas);controls.enableDamping=true;controls.minDistance=1.6;controls.maxDistance=14;controls.maxPolarAngle=Math.PI*0.62;controls.enablePan=false;
 const HOME={pos:new THREE.Vector3(2.2,1.7,4.2),tgt:new THREE.Vector3(0,0.45,0)};
-function resetView(){const f=(typeof frog!=='undefined')?frog.position:new THREE.Vector3();camera.position.copy(f).add(HOME.pos);controls.target.copy(f).add(HOME.tgt);controls.update()}
+// v10 camera rig: follow (third person, behind the frog) / free (v8 orbit) / first (frog's-eye view). 'pinned' = a scripted shot (test/screenshot hooks) -> behaves like free.
+const CAM={mode:'follow',pinned:false,yaw:0,elev:0.31,dist:4.8,DEF_ELEV:0.31,DEF_DIST:4.8,drag:null,pinch:null,lastDrag:-99,recenter:false,autoRecenter:true,aim:0,
+ tgt:new THREE.Vector3(),under:false,fpYaw:0,fpPitch:-0.1,snap:true};
+const CAM_MODES=['follow','free','first'],CAM_NAME={follow:'跟随',free:'自由',first:'第一人称'};
+const wrapA=a=>Math.atan2(Math.sin(a),Math.cos(a));
+function resetView(){const f=(typeof frog!=='undefined')?frog.position:new THREE.Vector3();CAM.pinned=false;
+ if(CAM.mode!=='free'&&typeof CTRL!=='undefined'){CAM.yaw=CTRL.yaw+Math.PI;CAM.elev=CAM.DEF_ELEV;CAM.dist=CAM.DEF_DIST;CAM.fpYaw=0;CAM.fpPitch=-0.1;CAM.recenter=false;CAM.aim=0;CAM.snap=true;controls.enabled=false;return}
+ controls.enabled=true;camera.position.copy(f).add(HOME.pos);controls.target.copy(f).add(HOME.tgt);controls.update()}
 function noiseTex(size,fn){const c=document.createElement('canvas');c.width=c.height=size;const x=c.getContext('2d');fn(x,size);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;return t}
 const rnd=(()=>{let s=20261029;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296}})();   // deterministic layout
 // --- night sky: gradient dome + stars + moon (also rendered into the environment map -> reflections on water/skin)
@@ -412,15 +419,19 @@ const HOP=1.0,MAXD=3.6,SWIM_SURF=WY-0.36,SWIM_MIN=FLOOR_Y+0.3,AIR0=0.33,AIR1=0.9
 const MODE_NAME={1:'普通跳',2:'远跳',3:'游泳'};
 const HINT={1:'WASD / 方向键：一跳一跳地走（按住连续跳）· 跳进水里自动切换游泳',
  2:'WASD / 方向键 或 点击荷叶/水面：放置目标 · Space / Enter：起跳 · 最远 3.6 米（绿=可跳，红=超距或受阻）',
- 3:'W / S：前进 / 后退 · A / D：左右转向 · Space / Q：上浮 · Shift / E：下潜 · 游到荷叶边按 W 爬上去'};
-const COMMON='T 说话 · C 鸣叫 · V 背心 · L 头灯 · M 小地图 · N 时段 · G 天气 · R 回起点 · 1/2/3 切换模式 · 鼠标拖动旋转视角';
+ 3:'WASD / 方向键：按镜头方向游（青跃自动转身）· Space / Q：上浮 · Shift / E：下潜 · 游到荷叶边继续向前爬上去'};
+const COMMON='T 说话 · C 鸣叫 · V 背心 · L 头灯 · M 小地图 · N 时段 · G 天气 · F 镜头 · K 静音 · R 回起点 · 1/2/3 模式 · 拖动/右键拖动转镜头';
 const smooth=t=>{t=Math.min(1,Math.max(0,t));return t*t*(3-2*t)};
 function surfaceAt(x,z){for(const p of PADS){const dx=x-p.x,dz=z-p.z;if(dx*dx+dz*dz<(p.r*0.9)**2)return p}return null}
 function inPond(x,z){return Math.hypot(x,z)<POND_R-0.8}
 function obstacleAt(x,z,y){for(const o of OBST){const ox=o.pad.x+o.ox,oz=o.pad.z+o.oz;if(Math.hypot(x-ox,z-oz)<o.r&&y<o.pad.grp.position.y+o.h)return o}return null}
 function fwdOf(yaw){return new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw))}
-function camInput(){const f=new THREE.Vector3();camera.getWorldDirection(f);f.y=0;if(f.lengthSq()<1e-6)f.set(0,0,-1);f.normalize();const r=new THREE.Vector3(-f.z,0,f.x);const v=new THREE.Vector3();
- if(KEYS.has('w')||KEYS.has('arrowup'))v.add(f);if(KEYS.has('s')||KEYS.has('arrowdown'))v.sub(f);if(KEYS.has('d')||KEYS.has('arrowright'))v.add(r);if(KEYS.has('a')||KEYS.has('arrowleft'))v.sub(r);
+// v10: WASD relative to the camera (W = into the screen). First-person: relative to the frog; in mode 1 A/D turn in place and S turns around (see controller / keys)
+const FP=()=>CAM.mode==='first'&&!CAM.pinned;
+function camInput(){const f=new THREE.Vector3();if(FP())f.copy(fwdOf(CTRL.yaw));else{camera.getWorldDirection(f);f.y=0;if(f.lengthSq()<1e-6)f.set(0,0,-1);f.normalize()}const r=new THREE.Vector3(-f.z,0,f.x);const v=new THREE.Vector3();
+ const hopFP=FP()&&CTRL.mode===1;
+ if(KEYS.has('w')||KEYS.has('arrowup'))v.add(f);if(hopFP)return v.lengthSq()?v.normalize():null;
+ if(KEYS.has('s')||KEYS.has('arrowdown'))v.sub(f);if(KEYS.has('d')||KEYS.has('arrowright'))v.add(r);if(KEYS.has('a')||KEYS.has('arrowleft'))v.sub(r);
  return v.lengthSq()?v.normalize():null}
 // --- trajectory (frog root) + height the skeleton adds in flight (the baked leap lifts the body ~0.75 at the apex)
 function landY(x,z,kind){const p=surfaceAt(x,z);return p?p.top():(kind==='dive'||kind==='hop'||kind==='long'?WY:WY)}
@@ -442,7 +453,7 @@ const pathDots=new THREE.Points(pathGeo,new THREE.PointsMaterial({color:0x7cff8a
 function showPreview(on){rangeRing.visible=tgtMark.visible=pathLine.visible=pathDots.visible=on}
 showPreview(false);
 // --- jump execution
-function startJump(to,kind){const from=frog.position.clone();const P=plan(from,to,kind);if(kind==='long'&&!P.ok){toast('不能跳：'+P.why);return false}
+function startJump(to,kind){const from=frog.position.clone();CTRL.turnGoal=null;const P=plan(from,to,kind);if(kind==='long'&&!P.ok){toast('不能跳：'+P.why);return false}
  const dx=to.x-from.x,dz=to.z-from.z;if(Math.hypot(dx,dz)>1e-3)CTRL.yaw=Math.atan2(dx,dz);
  const pad=surfaceAt(to.x,to.z);CTRL.jump={from,to:new THREE.Vector3(to.x,P.ty,to.z),pad,kind,H:P.H,landed:false,leftPad:CTRL.pad};
  if(CTRL.pad&&CTRL.where==='pad'){CTRL.pad.v+=0.35}
@@ -457,17 +468,22 @@ function jumpUpdate(){const J=CTRL.jump,a=actions.jump;if(!J)return;const ct=a.t
  if(!J.landed&&ct>=AIR1){J.landed=true;if(J.pad){landOnPad(J.pad,J.to.x,J.to.z)}else{enterWater(J.to.x,J.to.z);CTRL.jump=null;return}}
  if(J.landed&&ct>=1.22)CTRL.jump=null}
 // --- swimming (6 channels: forward/back, turn left/right, up/down)
-function swimUpdate(dt){const k=KEYS;const fwdIn=(k.has('w')||k.has('arrowup')?1:0)-(k.has('s')||k.has('arrowdown')?1:0);const turn=(k.has('a')||k.has('arrowleft')?1:0)-(k.has('d')||k.has('arrowright')?1:0);
+function swimUpdate(dt){const k=KEYS;let fwdIn=0;
  const up=k.has(' ')||k.has('q'),down=k.has('shift')||k.has('e');
- CTRL.yaw+=turn*1.9*dt;CTRL.spd+=(fwdIn*1.5-CTRL.spd)*Math.min(1,dt*(fwdIn?1.8:1.2));
+ if(FP()){fwdIn=(k.has('w')||k.has('arrowup')?1:0)-(k.has('s')||k.has('arrowdown')?1:0);const turn=(k.has('a')||k.has('arrowleft')?1:0)-(k.has('d')||k.has('arrowright')?1:0);CTRL.yaw+=turn*1.9*dt}   // first person: v8 tank steering
+ else{const dir=camInput();if(dir){const d=wrapA(Math.atan2(dir.x,dir.z)-CTRL.yaw);
+   if(Math.abs(d)>2.4)fwdIn=-1;   // straight back (toward the camera): back-pedal, keep facing
+   else{CTRL.yaw+=Math.sign(d)*Math.min(Math.abs(d),3.4*dt);fwdIn=Math.pow(Math.max(0,Math.cos(d)),1.5)}}}   // v10: steer toward the camera-relative direction, swim once facing it
+ CTRL.spd+=(fwdIn*1.5-CTRL.spd)*Math.min(1,dt*(fwdIn?1.8:1.2));
  if(up)CTRL.vy+=2.2*dt;else if(down)CTRL.vy-=2.2*dt;else if(frog.position.y<SWIM_SURF)CTRL.vy+=(SWIM_SURF-frog.position.y)*0.9*dt;   // buoyancy floats it back up
  CTRL.vy*=Math.pow(0.25,dt);CTRL.vy=THREE.MathUtils.clamp(CTRL.vy,-1.1,1.1);
  const f=fwdOf(CTRL.yaw),p=frog.position;let nx=p.x+f.x*CTRL.spd*dt,nz=p.z+f.z*CTRL.spd*dt;if(!inPond(nx,nz)){nx=p.x;nz=p.z;CTRL.spd*=0.3}
  let ny=p.y+CTRL.vy*dt;const ceil=surfaceAt(nx,nz)?SWIM_SURF-0.26:SWIM_SURF;   // can't surface through a lily pad
- if(ny>ceil){ny=Math.max(ceil,ny+(ceil-ny)*Math.min(1,dt*5));CTRL.vy=Math.min(CTRL.vy,0)}   // eases down to swimming depthif(ny<SWIM_MIN){ny=SWIM_MIN;CTRL.vy=Math.max(CTRL.vy,0)}
+ if(ny>ceil){ny=Math.max(ceil,ny+(ceil-ny)*Math.min(1,dt*5));CTRL.vy=Math.min(CTRL.vy,0)}   // eases down to swimming depth
+ if(ny<SWIM_MIN){ny=SWIM_MIN;CTRL.vy=Math.max(CTRL.vy,0)}   // v10: pond floor (this clamp had slipped into the comment above)
  p.set(nx,ny,nz);
  // reach a lily pad at the surface + keep pushing forward -> climb onto it (a real jump)
- if(fwdIn>0&&ny>SWIM_SURF-0.1){const probe=p.clone().addScaledVector(f,0.6);const pad=surfaceAt(probe.x,probe.z);
+ if(fwdIn>0.5&&ny>SWIM_SURF-0.1){const probe=p.clone().addScaledVector(f,0.6);const pad=surfaceAt(probe.x,probe.z);
   if(pad){const into=new THREE.Vector3(pad.x-p.x,0,pad.z-p.z);const dd=into.length();into.normalize();const tgt=p.clone().addScaledVector(into,Math.max(0.3,dd-pad.r*0.55));tgt.y=0;
    if(!obstacleAt(tgt.x,tgt.z,pad.top()+0.05)){startJump(tgt,'climb');setMode(1,true);toast('爬上荷叶！');return}}}
  const a=actions.swim;if(cur!==a)play('swim',0.25);a.setEffectiveTimeScale(0.35+Math.abs(CTRL.spd)*1.1+Math.abs(CTRL.vy)*0.7);
@@ -479,18 +495,75 @@ function controllerUpdate(dt){if(!model||CTRL.paused)return;
  else if(CTRL.where==='pad'){const p=CTRL.pad;frog.position.y=p.top();frog.rotation.set(0,CTRL.yaw,0,'YXZ');
   // stay with the pad as it bobs; keep the frog on it
   const dir=camInput();
-  if(CTRL.mode===1&&dir){const to=frog.position.clone().addScaledVector(dir,HOP);if(inPond(to.x,to.z)&&!obstacleAt(to.x,to.z,landY(to.x,to.z)+0.05))startJump(to,'hop');else{CTRL.yaw=Math.atan2(dir.x,dir.z)}}
+  // v10: turn smoothly toward the input direction first (keeps turning after a short tap), hop once facing it
+  if(CTRL.mode===1&&FP()){const tr=(KEYS.has('a')||KEYS.has('arrowleft')?1:0)-(KEYS.has('d')||KEYS.has('arrowright')?1:0);if(tr){CTRL.yaw+=tr*2.2*dt;frog.rotation.y=CTRL.yaw}}
+  if(CTRL.mode===1&&dir&&!(FP()&&CTRL.turnGoal!=null))CTRL.turnGoal=Math.atan2(dir.x,dir.z);
+  if(CTRL.mode===1&&CTRL.turnGoal!=null){const d=wrapA(CTRL.turnGoal-CTRL.yaw);CTRL.yaw+=Math.sign(d)*Math.min(Math.abs(d),13*dt);frog.rotation.y=CTRL.yaw;
+   if(Math.abs(d)<0.35){if(dir){const to=frog.position.clone().addScaledVector(fwdOf(CTRL.turnGoal),HOP);if(inPond(to.x,to.z)&&!obstacleAt(to.x,to.z,landY(to.x,to.z)+0.05)){CTRL.turnGoal=null;startJump(to,'hop')}}
+    else if(Math.abs(d)<1e-3)CTRL.turnGoal=null}}
   if(CTRL.mode===2){if(dir){CTRL.target.addScaledVector(dir,2.6*dt)}const P=plan(frog.position,CTRL.target,'long');CTRL.tvalid=P.ok;CTRL.treason=P.why;
    tgtMark.position.set(CTRL.target.x,P.ty+0.02,CTRL.target.z);rangeRing.position.set(frog.position.x,frog.position.y+0.03,frog.position.z);
    pathGeo.setFromPoints(P.pts);pathLine.computeLineDistances();const col=P.ok?0x7cff8a:0xff5a5a;pathLine.material.color.setHex(col);pathDots.material.color.setHex(col);tgtMark.children[0].material.color.setHex(col);showPreview(true)}
   else showPreview(false);
   if(CTRL.mode===3){const f=fwdOf(CTRL.yaw);const to=new THREE.Vector3(p.x,0,p.z).addScaledVector(f,p.r+0.75);startJump(to,'dive')}}
  else if(CTRL.where==='water'){showPreview(false);swimUpdate(dt);frog.rotation.y=CTRL.yaw;frog.rotation.order='YXZ'}
- // follow camera + moonlight shadow box around the frog
- const d=frog.position.clone().sub(CTRL.lastFrog);camera.position.add(d);controls.target.add(d);CTRL.lastFrog.copy(frog.position);
- if(camera.position.y<FLOOR_Y+0.35)camera.position.y=FLOOR_Y+0.35;
+ // camera rig (v10) + moonlight shadow box around the frog
+ camUpdate(dt);
  key.position.copy(frog.position).addScaledVector(KEY_DIR,14);key.target.position.copy(frog.position);bounce.position.copy(frog.position).add(new THREE.Vector3(0.8,1.3,1.6));
  hudUpdate()}
+// ===================== v10: 镜头（跟随 / 自由 / 第一人称 · F 切换）
+// follow: smooth third-person camera behind the frog; drag (left / right button) or swipe orbits it, ~1.6 s after release it swings back behind
+// (panel: 自动回正). It never dips into the water above the surface (no pad clipping, no jitter at the surface) and follows the frog under water.
+const _ct=new THREE.Vector3(),_cq=new THREE.Vector3(),_ce=new THREE.Vector3();
+const clampN=THREE.MathUtils.clamp;
+function camUpdate(dt){const F=frog.position;const dF=_ct.copy(F).sub(CTRL.lastFrog);CTRL.lastFrog.copy(F);
+ if(CAM.pinned||CAM.mode==='free'){controls.enabled=true;camera.position.add(dF);controls.target.add(dF);if(camera.position.y<FLOOR_Y+0.35)camera.position.y=FLOOR_Y+0.35;return}
+ controls.enabled=false;
+ // under-water state with hysteresis (no flip-flopping while swimming at the surface)
+ if(CTRL.where!=='water')CAM.under=false;else if(F.y<SWIM_SURF-0.25)CAM.under=true;else if(F.y>SWIM_SURF-0.12)CAM.under=false;
+ const relax=!CAM.drag&&CAM.autoRecenter&&tAll-CAM.lastDrag>1.6;
+ if(CAM.mode==='first'){const eL=B('eye.L'),eR=B('eye.R');const e=_cq;
+  if(eL&&eR){eL.getWorldPosition(e);eR.getWorldPosition(_ce);e.add(_ce).multiplyScalar(0.5)}else e.copy(F).setY(F.y+0.9);
+  e.addScaledVector(fwdOf(CTRL.yaw),0.2);e.y+=0.08;
+  if(CTRL.where==='water')e.y=CAM.under?Math.min(e.y,WY-0.12):Math.max(e.y,WY+0.1);
+  if(relax){const k=Math.min(1,dt*2.5);CAM.fpYaw-=CAM.fpYaw*k;CAM.fpPitch+=(-0.1-CAM.fpPitch)*k}
+  const y=CTRL.yaw+CAM.fpYaw,pt=CAM.fpPitch;camera.position.copy(e);
+  CAM.tgt.copy(e).add(_ce.set(Math.sin(y)*Math.cos(pt),Math.sin(pt),Math.cos(y)*Math.cos(pt)));camera.lookAt(CAM.tgt);controls.target.copy(CAM.tgt);CAM.snap=false;return}
+ // look target (lifted while aiming a long jump, shifted toward the landing spot)
+ const aimWant=(CTRL.mode===2&&CTRL.where==='pad'&&!CTRL.jump)?1:0;CAM.aim+=(aimWant-CAM.aim)*Math.min(1,dt*3);
+ const tg=_cq.copy(F);tg.y+=CAM.under?0.25:HOME.tgt.y;
+ if(CAM.aim>0.01){tg.x+=(CTRL.target.x-F.x)*0.45*CAM.aim;tg.z+=(CTRL.target.z-F.z)*0.45*CAM.aim}
+ if(CAM.snap)CAM.tgt.copy(tg);else CAM.tgt.lerp(tg,1-Math.exp(-dt*9));
+ // yaw: user drag > swing back behind after release > lazy follow while moving forward / sideways (never spins round when walking toward the camera)
+ const d=wrapA(CTRL.yaw+Math.PI-CAM.yaw);
+ if(!CAM.drag){const back=KEYS.has('s')||KEYS.has('arrowdown');
+  if(CAM.recenter&&relax){const k=Math.min(1,dt*2.6);CAM.yaw+=d*k;CAM.elev+=(CAM.DEF_ELEV-CAM.elev)*k;if(Math.abs(d)<0.03&&Math.abs(CAM.elev-CAM.DEF_ELEV)<0.03)CAM.recenter=false}
+  else if(CAM.autoRecenter&&!CAM.recenter&&!back&&Math.abs(d)<2.0&&(CTRL.jump||Math.abs(CTRL.spd)>0.2))CAM.yaw+=d*Math.min(1,dt*1.1)}
+ let el=lerp(CAM.elev,Math.max(CAM.elev,0.95),CAM.aim),dist=lerp(CAM.dist,Math.max(CAM.dist,7.4),CAM.aim);
+ if(CAM.under){dist=Math.min(dist,3.0);el=Math.min(el,0.2)}
+ const want=_ct.copy(CAM.tgt).add(_ce.set(Math.sin(CAM.yaw)*Math.cos(el),Math.sin(el),Math.cos(CAM.yaw)*Math.cos(el)).multiplyScalar(dist));
+ // collision: above water stay clear of the surface and the lily pads; under water stay below the surface and above the floor
+ if(CAM.under){want.y=clampN(want.y,FLOOR_Y+0.3,WY-0.22)}else want.y=Math.max(want.y,WY+0.3);
+ if(CAM.snap){camera.position.copy(want);CAM.snap=false}else camera.position.lerp(want,1-Math.exp(-dt*12));
+ camera.lookAt(CAM.tgt);controls.target.copy(CAM.tgt)}
+function setCamMode(m,silent){if(!CAM_NAME[m])return;const was=CAM.mode;CAM.mode=m;CAM.pinned=false;
+ if(m==='free'){controls.enabled=true;controls.update()}else{controls.enabled=false;if(m==='follow'&&was!=='follow'){CAM.yaw=CTRL.yaw+Math.PI;CAM.recenter=false}if(m==='first'){CAM.fpYaw=0;CAM.fpPitch=-0.1}}
+ document.querySelectorAll('#camBtns button').forEach(b=>b.classList.toggle('on',b.dataset.cam===m));if(!silent)toast('镜头：'+CAM_NAME[m]+'（F）')}
+// drag / swipe to orbit (follow) or look around (first person); wheel / pinch = distance. Free mode keeps OrbitControls.
+const PTRS=new Map();
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('pointerdown',e=>{PTRS.set(e.pointerId,[e.clientX,e.clientY]);if(controls.enabled)return;
+ if(PTRS.size===1)CAM.drag={x:e.clientX,y:e.clientY,sum:0};else if(PTRS.size===2){const [a,b]=[...PTRS.values()];CAM.pinch={d:Math.hypot(a[0]-b[0],a[1]-b[1]),dist:CAM.dist};CAM.drag=null}});
+addEventListener('pointermove',e=>{if(!PTRS.has(e.pointerId))return;PTRS.set(e.pointerId,[e.clientX,e.clientY]);if(controls.enabled)return;
+ if(CAM.pinch&&PTRS.size>=2){const [a,b]=[...PTRS.values()];CAM.dist=clampN(CAM.pinch.dist*CAM.pinch.d/Math.max(20,Math.hypot(a[0]-b[0],a[1]-b[1])),1.8,12);return}
+ const D=CAM.drag;if(!D)return;const dx=e.clientX-D.x,dy=e.clientY-D.y;D.x=e.clientX;D.y=e.clientY;D.sum+=Math.abs(dx)+Math.abs(dy);if(D.sum<4)return;
+ const k=2*Math.PI/innerHeight;
+ if(CAM.mode==='first'){CAM.fpYaw=clampN(CAM.fpYaw-dx*k*0.8,-2.6,2.6);CAM.fpPitch=clampN(CAM.fpPitch-dy*k*0.6,-1.1,0.9)}
+ else{CAM.yaw-=dx*k;CAM.elev=clampN(CAM.elev+dy*k*0.7,-0.12,1.3)}
+ CAM.lastDrag=tAll;CAM.recenter=true});
+const camPtrUp=e=>{PTRS.delete(e.pointerId);if(PTRS.size<2)CAM.pinch=null;if(!PTRS.size){if(CAM.drag&&CAM.drag.sum>=4){CAM.lastDrag=tAll;CAM.recenter=true}CAM.drag=null}};
+addEventListener('pointerup',camPtrUp);addEventListener('pointercancel',camPtrUp);
+canvas.addEventListener('wheel',e=>{if(controls.enabled)return;e.preventDefault();CAM.dist=clampN(CAM.dist*Math.pow(1.0015,e.deltaY),1.8,12)},{passive:false});
 // --- modes, HUD, keys
 function setMode(m,silent){m=+m;if(m!==1&&m!==2&&m!==3)return;
  if(CTRL.where==='water'&&m!==3&&!CTRL.jump){if(!silent)toast('在水里只能游泳：游到荷叶边按 W 爬上去');m=3}
@@ -502,17 +575,19 @@ function hudUpdate(){const w=CTRL.where==='pad'?'在荷叶上':CTRL.where==='air
 const TYPING=()=>{const t=document.activeElement;return t&&(t.tagName==='INPUT'&&t.type!=='range'&&t.type!=='checkbox'||t.tagName==='TEXTAREA')};
 addEventListener('keydown',e=>{if(TYPING())return;const k=e.key.toLowerCase();
  if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(k))e.preventDefault();
- if(e.repeat&&['1','2','3','t','c','v','r','enter'].includes(k))return;
+ if(e.repeat&&['1','2','3','t','c','v','r','f','enter'].includes(k))return;
+ if((k==='s'||k==='arrowdown')&&!e.repeat&&FP()&&CTRL.mode===1&&CTRL.where==='pad'&&!CTRL.jump)CTRL.turnGoal=CTRL.yaw+Math.PI;   // first person: S turns round
  KEYS.add(k);
  if(k==='1'||k==='2'||k==='3')setMode(+k);
  else if((k===' '||k==='enter')&&CTRL.mode===2&&CTRL.where==='pad'&&!CTRL.jump){CTRL.target.y=0;startJump(CTRL.target.clone(),'long')}
  else if(k==='t'){const ids=['greet1','sci1','sci2','sci3','sci4','sci5','sci6'];sayId(ids[(Math.random()*ids.length)|0])}
  else if(k==='c'){if(CTRL.where==='pad'&&!CTRL.jump){play('croak');react('croak')}else toast('站在荷叶上才能鸣叫')}
  else if(k==='v'){const on=!$('#vestOn').checked;setVest(on);sayId(on?'vest_on':'vest_off')}
- else if(k==='r'){resetFrog()}});
+ else if(k==='r'){resetFrog()}
+ else if(k==='f'){setCamMode(CAM_MODES[(CAM_MODES.indexOf(CAM.mode)+1)%CAM_MODES.length])}});
 addEventListener('keyup',e=>KEYS.delete(e.key.toLowerCase()));addEventListener('blur',()=>KEYS.clear());
 document.querySelectorAll('#hud .modes button').forEach(b=>b.onclick=()=>setMode(+b.dataset.m));
-function resetFrog(){CTRL.jump=null;CTRL.where='pad';CTRL.pad=PADS[0];CTRL.yaw=0.55;CTRL.vy=0;CTRL.spd=0;frog.position.set(0,PADS[0].top(),0);frog.rotation.set(0,CTRL.yaw,0,'YXZ');
+function resetFrog(){CTRL.jump=null;CTRL.turnGoal=null;CTRL.where='pad';CTRL.pad=PADS[0];CTRL.yaw=0.55;CTRL.vy=0;CTRL.spd=0;frog.position.set(0,PADS[0].top(),0);frog.rotation.set(0,CTRL.yaw,0,'YXZ');
  baseLoop='idle';if(model)play('idle',0.2);CTRL.lastFrog.copy(frog.position);resetView();setMode(1,true)}
 // mode 2: click a lily pad or the water to place the target
 function pickTarget(){const hits=ray.intersectObjects([water,...PADS.map(p=>p.grp.children[0])],false);if(!hits.length)return false;const h=hits[0].point;CTRL.target.set(h.x,0,h.z);return true}
@@ -523,45 +598,62 @@ const IS_MOBILE=matchMedia('(max-width:760px)').matches||('ontouchstart' in wind
 const V9={lamp:null,lampOn:false,spot:null,beam:null,beamMat:null,lens:null,mm:{on:!IS_MOBILE,zoom:1,cv:null,ctx:null},fishSets:[],turtles:[],t:0};
 const r9=(()=>{let s=909;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296}})();
 const lerp=(a,b,t)=>a+(b-a)*t;
-// ---------------------------------------------------------------- 1) 头灯 (modelled lamp on the snout, follows the head bone)
-function buildHeadlamp(){
- const g=new THREE.Group();g.name='Qingyue_Headlamp';
+// ---------------------------------------------------------------- 1) 头灯 (v10: a small lamp carried by vine tendrils on the front of the vine crown)
+const LAMP_AIM=new THREE.Vector3(0,-0.1,1).normalize();   // beam direction in lamp space (lamp itself is pitched 0.12 rad down -> ~12 deg below the head's forward)
+function crownMats(){const m={};if(model)model.traverse(o=>{if(o.isMesh&&o.material){if(o.material.name==='Qingyue_Crown_Gold')m.vine=o.material;if(o.material.name==='Qingyue_Crown_Leaf')m.leaf=o.material}});return m}
+function buildHeadlamp(){const S=0.72;   // v9 lamp proportions scaled to sit on the crown band
+ const g=new THREE.Group();g.name='Qingyue_Headlamp';const CM=crownMats();
  const khaki=new THREE.MeshStandardMaterial({color:0x7f6f45,roughness:0.55,metalness:0.1});           // matches the vest trim
  const gold=new THREE.MeshStandardMaterial({color:0xd9a441,roughness:0.25,metalness:1,envMapIntensity:2.2}); // matches the crown
- const strapM=new THREE.MeshStandardMaterial({color:0x4d5a30,roughness:0.8});
+ const vineM=CM.vine||gold,leafM=CM.leaf||new THREE.MeshStandardMaterial({color:0x5f7a2a,roughness:0.5,side:THREE.DoubleSide});
  const reflM=new THREE.MeshStandardMaterial({color:0xf2efe6,roughness:0.08,metalness:1,envMapIntensity:2.5});
  const lensM=new THREE.MeshPhysicalMaterial({color:0xffffff,roughness:0.02,transmission:0.6,thickness:0.01,emissive:0xfff1c8,emissiveIntensity:0,clearcoat:1});
- // housing: lathe profile (rounded back -> straight barrel -> flared front), axis = +Z (forward)
- const prof=[[0.0,-0.034],[0.018,-0.033],[0.03,-0.027],[0.036,-0.016],[0.038,0.0],[0.039,0.018],[0.043,0.026],[0.044,0.03]].map(([r,z])=>new THREE.Vector2(r,z));
- const housing=new THREE.Mesh(new THREE.LatheGeometry(prof,40),khaki);housing.rotation.x=Math.PI/2;g.add(housing);
- const bezel=new THREE.Mesh(new THREE.TorusGeometry(0.041,0.0055,14,48),gold);bezel.position.z=0.031;g.add(bezel);
- const refl=new THREE.Mesh(new THREE.LatheGeometry([[0.008,0.006],[0.02,0.016],[0.036,0.029]].map(([r,z])=>new THREE.Vector2(r,z)),40),reflM);refl.rotation.x=Math.PI/2;g.add(refl);
- const lens=new THREE.Mesh(new THREE.CircleGeometry(0.038,40),lensM);lens.position.z=0.0305;g.add(lens);
- const bulb=new THREE.Mesh(new THREE.SphereGeometry(0.008,16,12),new THREE.MeshStandardMaterial({color:0xffffff,emissive:0xfff3d0,emissiveIntensity:0}));bulb.position.z=0.012;g.add(bulb);
- const knob=new THREE.Mesh(new THREE.CylinderGeometry(0.008,0.009,0.012,20),gold);knob.position.set(0,0.04,-0.004);g.add(knob);
- // mounting pad that sits on the skin + two short elastic strap tabs hugging the snout sides
- const pad=new THREE.Mesh(new THREE.LatheGeometry([[0,0],[0.03,0.002],[0.046,0.008],[0.05,0.014],[0.046,0.018]].map(([r,z])=>new THREE.Vector2(r,z)),36),khaki);
- pad.rotation.x=Math.PI/2;pad.scale.set(1.25,0.75,1);pad.position.set(0,-0.032,-0.012);g.add(pad);
- for(const s of [1,-1]){const c=new THREE.CatmullRomCurve3([new THREE.Vector3(0.045*s,-0.03,-0.01),new THREE.Vector3(0.085*s,-0.045,-0.03),new THREE.Vector3(0.12*s,-0.07,-0.06)]);
-  const st=new THREE.Mesh(new THREE.TubeGeometry(c,16,0.006,8,false),strapM);st.scale.set(1,1,1);g.add(st)}
+ const V2=(r,z)=>new THREE.Vector2(r*S,z*S);
+ // housing: lathe profile (rounded back -> barrel -> flared front), axis = +Z (forward)
+ const housing=new THREE.Mesh(new THREE.LatheGeometry([[0.0,-0.034],[0.018,-0.033],[0.03,-0.027],[0.036,-0.016],[0.038,0.0],[0.039,0.018],[0.043,0.026],[0.044,0.03]].map(([r,z])=>V2(r,z)),40),khaki);housing.rotation.x=Math.PI/2;g.add(housing);
+ const bezel=new THREE.Mesh(new THREE.TorusGeometry(0.041*S,0.0055*S,14,48),gold);bezel.position.z=0.031*S;g.add(bezel);
+ const refl=new THREE.Mesh(new THREE.LatheGeometry([[0.008,0.006],[0.02,0.016],[0.036,0.029]].map(([r,z])=>V2(r,z)),40),reflM);refl.rotation.x=Math.PI/2;g.add(refl);
+ const lens=new THREE.Mesh(new THREE.CircleGeometry(0.038*S,40),lensM);lens.position.z=0.0305*S;g.add(lens);
+ const bulb=new THREE.Mesh(new THREE.SphereGeometry(0.008*S,16,12),new THREE.MeshStandardMaterial({color:0xffffff,emissive:0xfff3d0,emissiveIntensity:0}));bulb.position.z=0.012*S;g.add(bulb);
+ const knob=new THREE.Mesh(new THREE.CylinderGeometry(0.007,0.008,0.009,20),gold);knob.position.set(0,0.029,-0.006);g.add(knob);
+ // vine cradle: a stem from the crown band up under the lamp, two tendrils that spiral round the barrel and end in curls, a few crown leaves
+ const tube=(pts,r)=>{const m=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p=>new THREE.Vector3(...p))),48,r,8,false),vineM);g.add(m);return m};
+ tube([[0,-0.05,-0.012],[0.004,-0.038,-0.006],[0,-0.03,0.0],[-0.003,-0.028,0.01]],0.0055);
+ for(const s of [1,-1]){const pts=[];const R=0.0305;
+  for(let i=0;i<=26;i++){const u=i/26,a=-Math.PI/2+s*u*Math.PI*1.55;const rr=R*(1+0.05*Math.sin(u*9));pts.push([s*0.002+Math.cos(a)*rr,Math.sin(a)*rr,-0.026+u*0.04])}
+  pts.unshift([s*0.012,-0.046,-0.03]);const tip=pts[pts.length-1];
+  for(let i=1;i<=6;i++){const a=i/6*Math.PI*1.4;pts.push([tip[0]+s*0.006*Math.sin(a),tip[1]+0.006*(1-Math.cos(a)),tip[2]+0.004*i/6])}   // curl
+  tube(pts,0.0034)}
+ const leafShape=new THREE.Shape();leafShape.moveTo(0,0);leafShape.bezierCurveTo(0.012,0.008,0.018,0.026,0,0.042);leafShape.bezierCurveTo(-0.018,0.026,-0.012,0.008,0,0);
+ for(const [x,y,z,rx,rz] of [[0.022,-0.042,-0.02,-0.9,-1.0],[-0.024,-0.04,-0.016,-0.8,1.1],[0.006,-0.045,-0.036,-1.6,0.3]]){
+  const lg=new THREE.ShapeGeometry(leafShape,8);const pp=lg.attributes.position;for(let i=0;i<pp.count;i++){const yy=pp.getY(i);pp.setZ(i,Math.sin(yy/0.042*Math.PI)*0.004+pp.getX(i)*pp.getX(i)*-4)}lg.computeVertexNormals();
+  const lf=new THREE.Mesh(lg,leafM);lf.position.set(x,y,z);lf.rotation.set(rx,0,rz);g.add(lf)}
  g.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=true}});
  // spotlight + target, beam cone (additive, fades along its length)
- const spot=new THREE.SpotLight(0xfff0d0,0,13,0.36,0.55,1.4);spot.position.set(0,0,0.034);g.add(spot);
- const tgt=new THREE.Object3D();tgt.position.set(0,-0.16,1.0);g.add(tgt);spot.target=tgt;
+ const spot=new THREE.SpotLight(0xfff0d0,0,13,0.36,0.55,1.4);spot.position.set(0,0,0.026);g.add(spot);
+ const tgt=new THREE.Object3D();tgt.position.copy(LAMP_AIM);g.add(tgt);spot.target=tgt;
  if(!IS_MOBILE){spot.castShadow=true;spot.shadow.mapSize.set(512,512);spot.shadow.bias=-0.0008;spot.shadow.camera.near=0.05}
  const L=5.2,R=Math.tan(0.36)*L;
- const cg=new THREE.CylinderGeometry(R,0.032,L,40,12,true);cg.translate(0,L/2,0);cg.rotateX(Math.PI/2);   // apex at the lens, opens along +Z
+ const cg=new THREE.CylinderGeometry(R,0.024,L,40,12,true);cg.translate(0,L/2,0);cg.rotateX(Math.PI/2);   // apex at the lens, opens along +Z
  const beamMat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,fog:false,
   uniforms:{uI:{value:0},uL:{value:L},uC:{value:new THREE.Color(0xfff0cc)}},
   vertexShader:'varying float vz;varying vec3 vN;varying vec3 vV;void main(){vz=position.z;vec4 mv=modelViewMatrix*vec4(position,1.);vV=normalize(-mv.xyz);vN=normalize(normalMatrix*normal);gl_Position=projectionMatrix*mv;}',
   fragmentShader:'uniform float uI;uniform float uL;uniform vec3 uC;varying float vz;varying vec3 vN;varying vec3 vV;void main(){float a=1.-clamp(vz/uL,0.,1.);float e=pow(abs(dot(normalize(vN),normalize(vV))),1.6);gl_FragColor=vec4(uC*uI*a*a*e,1.);}'});
- const beam=new THREE.Mesh(cg,beamMat);beam.rotation.x=0.16;   // same aim as the spotlight target (0,-0.16,1)
- beam.renderOrder=6;beam.frustumCulled=false;g.add(beam);
+ const beam=new THREE.Mesh(cg,beamMat);beam.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),LAMP_AIM);   // same aim as the spotlight
+ beam.position.z=0.026;beam.renderOrder=6;beam.frustumCulled=false;g.add(beam);
  V9.lamp=g;V9.spot=spot;V9.beam=beam;V9.beamMat=beamMat;V9.lens=lens;V9.bulb=bulb;return g}
-function attachHeadlamp(){const head=B('head');if(!head)return;const lamp=buildHeadlamp();
- // mount on the snout top (Blender (0,-0.28,0.849) -> glTF (0,0.849,0.28)), lifted along the skin normal; aimed forward, 9 deg down
- const n=new THREE.Vector3(0,0.858,0.513).normalize();const p=new THREE.Vector3(0,0.849,0.28).addScaledVector(n,0.045);
- model.updateMatrixWorld(true);lamp.position.copy(p);lamp.rotation.set(0.16,0,0);model.add(lamp);lamp.updateMatrixWorld(true);head.attach(lamp);setLamp(false,true)}
+// Mount point = the front of the vine crown (found from the crown mesh), lamp sits on the band and looks forward, 0.12 rad down.
+// The lamp is a child of the head bone; every frame it is re-posed from the crown bone (crown tilt slider included), so it rides on the crown.
+function crownFront(){let cr=null;model.traverse(o=>{if(o.isMesh&&o.material&&o.material.name==='Qingyue_Crown_Gold')cr=o});if(!cr)return new THREE.Vector3(0.03,0.895,0.205);
+ const p=cr.geometry.attributes.position;let zMax=-9;for(let i=0;i<p.count;i++)zMax=Math.max(zMax,p.getZ(i));const c=new THREE.Vector3();let n=0;
+ for(let i=0;i<p.count;i++)if(p.getZ(i)>zMax-0.012){c.x+=p.getX(i);c.y+=p.getY(i);c.z+=p.getZ(i);n++}return c.divideScalar(n)}
+function attachHeadlamp(){const head=B('head'),crown=B('crown');if(!head)return;const lamp=buildHeadlamp();
+ const f=crownFront();V9.crownFrontModel=f.clone();const p=f.clone().add(new THREE.Vector3(0,0.036,0.016));
+ model.updateMatrixWorld(true);lamp.position.copy(p);lamp.rotation.set(0.12,0,0);model.add(lamp);lamp.updateMatrixWorld(true);
+ if(crown){crown.attach(lamp);V9.lampInCrown=lamp.matrix.clone();const fm=crown.worldToLocal(model.localToWorld(f.clone()));V9.crownFrontLocal=fm}
+ head.attach(lamp);V9.lampCrown=crown;syncLamp();setLamp(false,true)}
+const _lm=new THREE.Matrix4();
+function syncLamp(){const c=V9.lampCrown;if(!c||!V9.lampInCrown)return;c.updateMatrix();_lm.multiplyMatrices(c.matrix,V9.lampInCrown);_lm.decompose(V9.lamp.position,V9.lamp.quaternion,V9.lamp.scale)}
 function setLamp(on,silent){V9.lampOn=on;if(!V9.lamp)return;const under=frog.position.y<WY-0.15;
  V9.spot.intensity=on?(under?9:6):0;V9.lens.material.emissiveIntensity=on?2.4:0;V9.bulb.material.emissiveIntensity=on?6:0;V9.beam.visible=on;
  const c=$('#lampOn');if(c)c.checked=on;if(!silent)toast(on?'头灯：开（L）':'头灯：关（L）')}
@@ -601,7 +693,7 @@ function buildFish(){for(const sp of FISH_SPECIES){const geo=fishGeometry(sp);
   fish.push({p:sc.c.clone().add(off),v:new THREE.Vector3(r9()-.5,0,r9()-.5).multiplyScalar(0.2),off,school:sc})}
  V9.fishSets.push({sp,m,U,fish,schools})}}
 const V9_m4=new THREE.Matrix4(),V9_q=new THREE.Quaternion(),V9_s=new THREE.Vector3(1,1,1),V9_v=new THREE.Vector3(),V9_v2=new THREE.Vector3(),V9_up=new THREE.Vector3(0,1,0),V9_fz=new THREE.Vector3(0,0,1);
-function lampInfo(){if(!V9.lampOn||!V9.lamp)return null;const o=new THREE.Vector3(),d=new THREE.Vector3(0,-0.16,1).normalize();V9.lamp.getWorldPosition(o);d.transformDirection(V9.lamp.matrixWorld);return{o,d}}
+function lampInfo(){if(!V9.lampOn||!V9.lamp)return null;const o=new THREE.Vector3(),d=LAMP_AIM.clone();V9.lamp.getWorldPosition(o);d.transformDirection(V9.lamp.matrixWorld);return{o,d}}
 function inBeam(p,L){if(!L)return false;V9_v2.copy(p).sub(L.o);const dist=V9_v2.length();return dist<7&&V9_v2.dot(L.d)>dist*Math.cos(0.42)}
 function clampWater(p,m=0.18){p.y=THREE.MathUtils.clamp(p.y,FLOOR_Y+m,WY-m);const r=Math.hypot(p.x,p.z);if(r>POND_R-1.5){p.x*=(POND_R-1.5)/r;p.z*=(POND_R-1.5)/r}}
 function fishUpdate(dt){const L=lampInfo(),F=frog.position;
@@ -1007,14 +1099,14 @@ function tick(){requestAnimationFrame(tick);const dt=Math.min(clock.getDelta(),0
    eyeY+=(THREE.MathUtils.clamp(yaw,-28,28)-eyeY)*Math.min(1,dt*10);eyeX+=(THREE.MathUtils.clamp(pit,-22,22)-eyeX)*Math.min(1,dt*10);ey+=eyeY;ex+=eyeX}
   for(const n of ['eye.L','eye.R']){const b=B(n);rotBone(b,[0,1,0],ey);rotBone(b,[1,0,0],ex)}
  }
- controls.update();renderer.render(scene,camera)}
+ if(V9.lamp)syncLamp();if(controls.enabled)controls.update();renderer.render(scene,camera)}
 tick();
 window.__pond={v9:()=>v9State(),atmo:()=>atmoState(),setTod:t=>setTod(t,true),setWeather:w=>setWeather(w,true),setQuality,strike,setLamp:on=>setLamp(on,true),toggleMinimap:on=>toggleMinimap(on,true),setZoom,state:()=>({mode:CTRL.mode,where:CTRL.where,x:frog.position.x,y:frog.position.y,z:frog.position.z,yaw:CTRL.yaw,jumping:!!CTRL.jump,jumpKind:CTRL.jump?CTRL.jump.kind:null,anim:cur?cur.getClip().name:null,
   animTime:cur?cur.time:0,target:[CTRL.target.x,CTRL.target.z],valid:CTRL.tvalid,reason:CTRL.treason,pad:CTRL.pad?PADS.indexOf(CTRL.pad):-1,padOff:CTRL.pad?CTRL.pad.off:0,under:camera.position.y<WY,log:CTRL.log.slice(),pads:PADS.length,preview:pathLine.visible,fog:scene.fog.density}),
  setMode,setTarget:(x,z)=>CTRL.target.set(x,0,z),placeWater:(x,z,yaw)=>{CTRL.jump=null;CTRL.where='water';CTRL.pad=null;CTRL.yaw=yaw;CTRL.vy=0;CTRL.spd=0;frog.position.set(x,SWIM_SURF,z);CTRL.lastFrog.copy(frog.position);resetView();setMode(3,true);play('swim',0)},pauseAt:t=>{CTRL.pauseAt=t},resume:()=>{CTRL.paused=false},reset:resetFrog,padInfo:i=>({x:PADS[i].x,z:PADS[i].z,r:PADS[i].r}),
- camLook:(dx,dy,dz,tx,ty,tz,fov)=>{camera.fov=fov||camera.fov;camera.updateProjectionMatrix();camera.position.set(frog.position.x+dx,frog.position.y+dy,frog.position.z+dz);controls.target.set(frog.position.x+tx,frog.position.y+ty,frog.position.z+tz);controls.update()},
+ camLook:(dx,dy,dz,tx,ty,tz,fov)=>{CAM.pinned=true;controls.enabled=true;camera.fov=fov||camera.fov;camera.updateProjectionMatrix();camera.position.set(frog.position.x+dx,frog.position.y+dy,frog.position.z+dz);controls.target.set(frog.position.x+tx,frog.position.y+ty,frog.position.z+tz);controls.update()},
  camFov:f=>{camera.fov=f;camera.updateProjectionMatrix()},
- camTo:(dx,dy,dz)=>{camera.position.set(frog.position.x+dx,frog.position.y+dy,frog.position.z+dz);controls.target.copy(frog.position).add(new THREE.Vector3(0,0.4,0));controls.update()}};
+ camTo:(dx,dy,dz)=>{CAM.pinned=true;controls.enabled=true;camera.position.set(frog.position.x+dx,frog.position.y+dy,frog.position.z+dz);controls.target.copy(frog.position).add(new THREE.Vector3(0,0.4,0));controls.update()}};
 window.__api={at:(n,t)=>{play(n,0);hold={n,t}},release:()=>{hold=null},get mixer(){return mixer},play,speak,actions:()=>Object.keys(actions),setBone:(i,v)=>{boneVal[i]=v},setMorphVal:(k,v)=>{morphVal[k]=v},setVest:v=>setVest(v),sayId,ttsState:()=>({ready:TTS.ready,failed:TTS.failed,playing:TTS.clip?TTS.clip.id:null,ctx:TTS.ac?TTS.ac.state:null,env:TTS.env,played:TTS.played.slice(),jaw:B('jaw')?bindAngle(B('jaw')):0}),vestCount:()=>vestMeshes.length,debugAngles:()=>({sac:B('vsac')?B('vsac').scale.x:0,armChin:armChinDist(),uaL:bindAngle(B('upper_arm.L')),lidL:bindAngle(B('lid.L')),jaw:bindAngle(B('jaw')),thighL:bindAngle(B('thigh.L')),rootY:B('root').position.y,rootZ:B('root').position.z}),autoBlink:v=>{$('#autoBlink').checked=v},cam:camera,controls};
 </script>
 </body>
