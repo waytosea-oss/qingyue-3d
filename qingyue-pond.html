@@ -257,7 +257,7 @@ loader.load('qingyue.glb',g=>{
  mixer=new THREE.AnimationMixer(model);
  for(const c of g.animations){const a=mixer.clipAction(c);actions[c.name]=a;if(ONE.has(c.name)){a.setLoop(THREE.LoopOnce);a.clampWhenFinished=true}}
  mixer.addEventListener('finished',e=>{if(e.action!==cur)return;const n=e.action.getClip().name;if(n==='hop_forward'){rootMotion()}else play(baseLoop,0.35)});
- play('idle',0);buildUI();resetFrog();
+ play('idle',0);buildUI();resetFrog();initV9();
  $('#load').style.opacity=0;setTimeout(()=>$('#load').remove(),700);
  window.__ready=true;
 },e=>{if(e.total)$('#bar').style.width=(e.loaded/e.total*100)+'%'},err=>{$('#load b').textContent='模型加载失败：请通过网页服务器打开（见说明.txt）';console.error(err)});
@@ -401,7 +401,7 @@ const MODE_NAME={1:'普通跳',2:'远跳',3:'游泳'};
 const HINT={1:'WASD / 方向键：一跳一跳地走（按住连续跳）· 跳进水里自动切换游泳',
  2:'WASD / 方向键 或 点击荷叶/水面：放置目标 · Space / Enter：起跳 · 最远 3.6 米（绿=可跳，红=超距或受阻）',
  3:'W / S：前进 / 后退 · A / D：左右转向 · Space / Q：上浮 · Shift / E：下潜 · 游到荷叶边按 W 爬上去'};
-const COMMON='T 说话 · C 鸣叫 · V 背心 · R 回起点 · 1/2/3 切换模式 · 鼠标拖动旋转视角';
+const COMMON='T 说话 · C 鸣叫 · V 背心 · L 头灯 · M 小地图 · R 回起点 · 1/2/3 切换模式 · 鼠标拖动旋转视角';
 const smooth=t=>{t=Math.min(1,Math.max(0,t));return t*t*(3-2*t)};
 function surfaceAt(x,z){for(const p of PADS){const dx=x-p.x,dz=z-p.z;if(dx*dx+dz*dz<(p.r*0.9)**2)return p}return null}
 function inPond(x,z){return Math.hypot(x,z)<POND_R-0.8}
@@ -506,6 +506,221 @@ function resetFrog(){CTRL.jump=null;CTRL.where='pad';CTRL.pad=PADS[0];CTRL.yaw=0
 function pickTarget(){const hits=ray.intersectObjects([water,...PADS.map(p=>p.grp.children[0])],false);if(!hits.length)return false;const h=hits[0].point;CTRL.target.set(h.x,0,h.z);return true}
 
 $('#hudCommon').textContent=COMMON;$('#hudHint').textContent=HINT[1];$('#panelT').onclick=()=>document.body.classList.toggle('nopanel');
+// ===================== v9: 小地图 · 头灯 · 水下生物 =====================
+const IS_MOBILE=matchMedia('(max-width:760px)').matches||('ontouchstart' in window&&innerWidth<900);
+const V9={lamp:null,lampOn:false,spot:null,beam:null,beamMat:null,lens:null,mm:{on:!IS_MOBILE,zoom:1,cv:null,ctx:null},fishSets:[],turtles:[],t:0};
+const r9=(()=>{let s=909;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296}})();
+const lerp=(a,b,t)=>a+(b-a)*t;
+// ---------------------------------------------------------------- 1) 头灯 (modelled lamp on the snout, follows the head bone)
+function buildHeadlamp(){
+ const g=new THREE.Group();g.name='Qingyue_Headlamp';
+ const khaki=new THREE.MeshStandardMaterial({color:0x7f6f45,roughness:0.55,metalness:0.1});           // matches the vest trim
+ const gold=new THREE.MeshStandardMaterial({color:0xd9a441,roughness:0.25,metalness:1,envMapIntensity:2.2}); // matches the crown
+ const strapM=new THREE.MeshStandardMaterial({color:0x4d5a30,roughness:0.8});
+ const reflM=new THREE.MeshStandardMaterial({color:0xf2efe6,roughness:0.08,metalness:1,envMapIntensity:2.5});
+ const lensM=new THREE.MeshPhysicalMaterial({color:0xffffff,roughness:0.02,transmission:0.6,thickness:0.01,emissive:0xfff1c8,emissiveIntensity:0,clearcoat:1});
+ // housing: lathe profile (rounded back -> straight barrel -> flared front), axis = +Z (forward)
+ const prof=[[0.0,-0.034],[0.018,-0.033],[0.03,-0.027],[0.036,-0.016],[0.038,0.0],[0.039,0.018],[0.043,0.026],[0.044,0.03]].map(([r,z])=>new THREE.Vector2(r,z));
+ const housing=new THREE.Mesh(new THREE.LatheGeometry(prof,40),khaki);housing.rotation.x=Math.PI/2;g.add(housing);
+ const bezel=new THREE.Mesh(new THREE.TorusGeometry(0.041,0.0055,14,48),gold);bezel.position.z=0.031;g.add(bezel);
+ const refl=new THREE.Mesh(new THREE.LatheGeometry([[0.008,0.006],[0.02,0.016],[0.036,0.029]].map(([r,z])=>new THREE.Vector2(r,z)),40),reflM);refl.rotation.x=Math.PI/2;g.add(refl);
+ const lens=new THREE.Mesh(new THREE.CircleGeometry(0.038,40),lensM);lens.position.z=0.0305;g.add(lens);
+ const bulb=new THREE.Mesh(new THREE.SphereGeometry(0.008,16,12),new THREE.MeshStandardMaterial({color:0xffffff,emissive:0xfff3d0,emissiveIntensity:0}));bulb.position.z=0.012;g.add(bulb);
+ const knob=new THREE.Mesh(new THREE.CylinderGeometry(0.008,0.009,0.012,20),gold);knob.position.set(0,0.04,-0.004);g.add(knob);
+ // mounting pad that sits on the skin + two short elastic strap tabs hugging the snout sides
+ const pad=new THREE.Mesh(new THREE.LatheGeometry([[0,0],[0.03,0.002],[0.046,0.008],[0.05,0.014],[0.046,0.018]].map(([r,z])=>new THREE.Vector2(r,z)),36),khaki);
+ pad.rotation.x=Math.PI/2;pad.scale.set(1.25,0.75,1);pad.position.set(0,-0.032,-0.012);g.add(pad);
+ for(const s of [1,-1]){const c=new THREE.CatmullRomCurve3([new THREE.Vector3(0.045*s,-0.03,-0.01),new THREE.Vector3(0.085*s,-0.045,-0.03),new THREE.Vector3(0.12*s,-0.07,-0.06)]);
+  const st=new THREE.Mesh(new THREE.TubeGeometry(c,16,0.006,8,false),strapM);st.scale.set(1,1,1);g.add(st)}
+ g.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=true}});
+ // spotlight + target, beam cone (additive, fades along its length)
+ const spot=new THREE.SpotLight(0xfff0d0,0,13,0.36,0.55,1.4);spot.position.set(0,0,0.034);g.add(spot);
+ const tgt=new THREE.Object3D();tgt.position.set(0,-0.16,1.0);g.add(tgt);spot.target=tgt;
+ if(!IS_MOBILE){spot.castShadow=true;spot.shadow.mapSize.set(512,512);spot.shadow.bias=-0.0008;spot.shadow.camera.near=0.05}
+ const L=5.2,R=Math.tan(0.36)*L;
+ const cg=new THREE.CylinderGeometry(R,0.032,L,40,12,true);cg.translate(0,L/2,0);cg.rotateX(Math.PI/2);   // apex at the lens, opens along +Z
+ const beamMat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,fog:false,
+  uniforms:{uI:{value:0},uL:{value:L},uC:{value:new THREE.Color(0xfff0cc)}},
+  vertexShader:'varying float vz;varying vec3 vN;varying vec3 vV;void main(){vz=position.z;vec4 mv=modelViewMatrix*vec4(position,1.);vV=normalize(-mv.xyz);vN=normalize(normalMatrix*normal);gl_Position=projectionMatrix*mv;}',
+  fragmentShader:'uniform float uI;uniform float uL;uniform vec3 uC;varying float vz;varying vec3 vN;varying vec3 vV;void main(){float a=1.-clamp(vz/uL,0.,1.);float e=pow(abs(dot(normalize(vN),normalize(vV))),1.6);gl_FragColor=vec4(uC*uI*a*a*e,1.);}'});
+ const beam=new THREE.Mesh(cg,beamMat);beam.rotation.x=0.16;   // same aim as the spotlight target (0,-0.16,1)
+ beam.renderOrder=6;beam.frustumCulled=false;g.add(beam);
+ V9.lamp=g;V9.spot=spot;V9.beam=beam;V9.beamMat=beamMat;V9.lens=lens;V9.bulb=bulb;return g}
+function attachHeadlamp(){const head=B('head');if(!head)return;const lamp=buildHeadlamp();
+ // mount on the snout top (Blender (0,-0.28,0.849) -> glTF (0,0.849,0.28)), lifted along the skin normal; aimed forward, 9 deg down
+ const n=new THREE.Vector3(0,0.858,0.513).normalize();const p=new THREE.Vector3(0,0.849,0.28).addScaledVector(n,0.045);
+ model.updateMatrixWorld(true);lamp.position.copy(p);lamp.rotation.set(0.16,0,0);model.add(lamp);lamp.updateMatrixWorld(true);head.attach(lamp);setLamp(false,true)}
+function setLamp(on,silent){V9.lampOn=on;if(!V9.lamp)return;const under=frog.position.y<WY-0.15;
+ V9.spot.intensity=on?(under?9:6):0;V9.lens.material.emissiveIntensity=on?2.4:0;V9.bulb.material.emissiveIntensity=on?6:0;V9.beam.visible=on;
+ const c=$('#lampOn');if(c)c.checked=on;if(!silent)toast(on?'头灯：开（L）':'头灯：关（L）')}
+// ---------------------------------------------------------------- 2) 水下生物：鱼（三种，成群）
+function fishGeometry(sp){// laterally-compressed body by cross-sections + forked caudal fin + dorsal/anal/pectoral fins; attribute 'along' drives the tail beat
+ const P=[],C=[],A=[],I=[];const NS=36,NR=18,L=sp.len,H=sp.h,W=sp.w;const col=(r,g,b)=>[r/255,g/255,b/255];
+ const back=col(...sp.back),flank=col(...sp.flank),belly=col(...sp.belly),stripe=sp.stripe?col(...sp.stripe):null;
+ const eyeZ=L*0.5-L*0.12,eyeY=H*0.22;
+ for(let i=0;i<=NS;i++){const s=i/NS,t=s*0.8;const sh=Math.pow(Math.sin(Math.PI*Math.min(1,Math.pow(s,0.62)*0.98+0.01)),0.85);
+  const hh=H*(0.08+0.92*sh)*(s>0.85?lerp(1,0.32,(s-0.85)/0.15):1),ww=W*(0.1+0.9*sh)*(s>0.8?lerp(1,0.35,(s-0.8)/0.2):1);
+  for(let j=0;j<=NR;j++){const a=j/NR*Math.PI*2;const y=hh*Math.sin(a)-(Math.sin(a)<0?hh*0.08:0),x=ww*Math.cos(a),z=L*0.5-t*L;P.push(x,y,z);A.push(t);
+   const v=Math.sin(a);let c=v>0.35?back.map((b,k)=>lerp(flank[k],b,(v-0.35)/0.65)):v<-0.2?belly.map((b,k)=>lerp(flank[k],b,(-v-0.2)/0.8)):flank.slice();
+   if(stripe&&Math.abs(v)<0.14&&t>0.18)c=stripe.slice();
+   const de=Math.hypot(z-eyeZ,y-eyeY);if(Math.abs(x)>ww*0.6&&de<H*0.16)c=de<H*0.1?[0.03,0.03,0.04]:[0.85,0.8,0.6];
+   C.push(...c)}}
+ for(let i=0;i<NS;i++)for(let j=0;j<NR;j++){const a=i*(NR+1)+j,b=a+NR+1;I.push(a,b,a+1,b,b+1,a+1)}
+ const fin=(pts,c,al)=>{const o=P.length/3;for(const [x,y,z] of pts){P.push(x,y,z);C.push(...c);A.push(al(z))}for(let k=1;k<pts.length-1;k++)I.push(o,o+k,o+k+1,o,o+k+1,o+k)};
+ const finC=col(...sp.fin),zt=L*0.5-0.8*L,tl=L*0.24,tA=z=>Math.min(1,(L*0.5-z)/L);
+ fin([[0,H*0.12,zt+0.01*L],[0,H*0.95,zt-tl],[0,H*0.18,zt-tl*0.62],[0,-H*0.18,zt-tl*0.62],[0,-H*0.95,zt-tl],[0,-H*0.12,zt+0.01*L]],finC,tA);   // forked tail
+ fin([[0,H*0.85,L*0.12],[0,H*(1.35+sp.dorsal),-L*0.02],[0,H*0.95,-L*0.2],[0,H*0.7,-L*0.24]],finC,tA);                                  // dorsal
+ fin([[0,-H*0.75,-L*0.12],[0,-H*1.2,-L*0.2],[0,-H*0.6,-L*0.26]],finC,tA);                                                                 // anal
+ for(const s of [1,-1])fin([[W*0.7*s,-H*0.3,L*0.28],[W*(1.9)*s,-H*0.75,L*0.16],[W*0.8*s,-H*0.45,L*0.2]],finC,tA);                        // pectorals
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('color',new THREE.Float32BufferAttribute(C,3));
+ g.setAttribute('along',new THREE.Float32BufferAttribute(A,1));g.setIndex(I);g.computeVertexNormals();return g}
+const FISH_SPECIES=[
+ {name:'鲫鱼',len:0.30,h:0.075,w:0.032,dorsal:0.15,back:[62,72,42],flank:[170,160,108],belly:[226,218,186],fin:[120,110,80],n:IS_MOBILE?6:10,schools:2,speed:0.38,freq:7},
+ {name:'麦穗鱼',len:0.15,h:0.026,w:0.017,dorsal:0.05,back:[86,88,74],flank:[160,158,140],belly:[220,214,196],stripe:[48,50,44],fin:[140,132,112],n:IS_MOBILE?12:24,schools:2,speed:0.55,freq:12},
+ {name:'鳑鲏',len:0.11,h:0.036,w:0.012,dorsal:0.4,back:[96,90,120],flank:[196,150,178],belly:[236,214,226],stripe:[120,170,190],fin:[200,110,120],n:IS_MOBILE?8:18,schools:2,speed:0.5,freq:13}];
+function buildFish(){for(const sp of FISH_SPECIES){const geo=fishGeometry(sp);
+ const iSwim=new THREE.InstancedBufferAttribute(new Float32Array(sp.n*2),2);for(let i=0;i<sp.n;i++){iSwim.setXY(i,r9()*6.28,0.85+r9()*0.3)}geo.setAttribute('iSwim',iSwim);
+ const U={value:0};const mat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.32,metalness:0.25,side:THREE.DoubleSide,envMapIntensity:1.4});
+ mat.onBeforeCompile=sh=>{sh.uniforms.uT=U;sh.vertexShader='uniform float uT;attribute float along;attribute vec2 iSwim;\n'+sh.vertexShader.replace('#include <begin_vertex>',
+  `#include <begin_vertex>\nfloat ph=uT*${sp.freq.toFixed(1)}*iSwim.y+iSwim.x-along*7.0;transformed.x+=sin(ph)*${(sp.len*0.11).toFixed(4)}*pow(along,1.5)+sin(ph-1.2)*${(sp.len*0.018).toFixed(4)};`)};
+ const m=new THREE.InstancedMesh(geo,mat,sp.n);m.frustumCulled=false;m.castShadow=false;m.receiveShadow=true;m.name='Fish_'+sp.name;scene.add(m);
+ const schools=[];for(let k=0;k<sp.schools;k++){const a=r9()*6.28,r=2+r9()*7;schools.push({c:new THREE.Vector3(Math.cos(a)*r,lerp(FLOOR_Y+0.45,WY-0.45,r9()),Math.sin(a)*r),tgt:new THREE.Vector3(),tT:0})}
+ const fish=[];for(let i=0;i<sp.n;i++){const sc=schools[i%sp.schools];const off=new THREE.Vector3((r9()-.5)*0.9,(r9()-.5)*0.35,(r9()-.5)*0.9);
+  fish.push({p:sc.c.clone().add(off),v:new THREE.Vector3(r9()-.5,0,r9()-.5).multiplyScalar(0.2),off,school:sc})}
+ V9.fishSets.push({sp,m,U,fish,schools})}}
+const V9_m4=new THREE.Matrix4(),V9_q=new THREE.Quaternion(),V9_s=new THREE.Vector3(1,1,1),V9_v=new THREE.Vector3(),V9_v2=new THREE.Vector3(),V9_up=new THREE.Vector3(0,1,0),V9_fz=new THREE.Vector3(0,0,1);
+function lampInfo(){if(!V9.lampOn||!V9.lamp)return null;const o=new THREE.Vector3(),d=new THREE.Vector3(0,-0.16,1).normalize();V9.lamp.getWorldPosition(o);d.transformDirection(V9.lamp.matrixWorld);return{o,d}}
+function inBeam(p,L){if(!L)return false;V9_v2.copy(p).sub(L.o);const dist=V9_v2.length();return dist<7&&V9_v2.dot(L.d)>dist*Math.cos(0.42)}
+function clampWater(p,m=0.18){p.y=THREE.MathUtils.clamp(p.y,FLOOR_Y+m,WY-m);const r=Math.hypot(p.x,p.z);if(r>POND_R-1.5){p.x*=(POND_R-1.5)/r;p.z*=(POND_R-1.5)/r}}
+function fishUpdate(dt){const L=lampInfo(),F=frog.position;
+ for(const set of V9.fishSets){set.U.value=V9.t;const sp=set.sp;
+  for(const sc of set.schools){sc.tT-=dt;if(sc.tT<=0||sc.c.distanceTo(sc.tgt)<0.5){const a=r9()*6.28,r=1.5+r9()*(POND_R-5);sc.tgt.set(Math.cos(a)*r,lerp(FLOOR_Y+0.4,WY-0.4,r9()),Math.sin(a)*r);sc.tT=8+r9()*8}
+   const goal=sc.tgt.clone();if(L&&inBeam(sc.c,L)){goal.copy(L.o).addScaledVector(L.d,1.6)}                     // curious: drift into the lamp beam
+   const fd=sc.c.distanceTo(F);if(fd<2.0){goal.copy(sc.c).add(V9_v.copy(sc.c).sub(F).setY(0).normalize().multiplyScalar(3))}   // school veers away from the frog
+   sc.c.addScaledVector(V9_v.copy(goal).sub(sc.c).normalize(),sp.speed*0.55*dt*(fd<2?2.2:1));clampWater(sc.c,0.35)}
+  for(let i=0;i<set.fish.length;i++){const f=set.fish[i];const want=V9_v.copy(f.school.c).add(f.off).sub(f.p);
+   const fd=f.p.distanceTo(F);if(fd<1.2)want.add(V9_v2.copy(f.p).sub(F).normalize().multiplyScalar(4*(1.2-fd)));      // flee the frog
+   if(L&&inBeam(f.p,L)){const d=f.p.distanceTo(L.o);if(d<0.7)want.add(V9_v2.copy(f.p).sub(L.o).normalize().multiplyScalar(2))}
+   for(let k=Math.max(0,i-3);k<Math.min(set.fish.length,i+3);k++){if(k===i)continue;const o=set.fish[k];const dd=f.p.distanceTo(o.p);if(dd<sp.len*1.4)want.add(V9_v2.copy(f.p).sub(o.p).multiplyScalar(2/(dd+1e-3)))}
+   f.v.addScaledVector(want,dt*1.6);const vmax=sp.speed*(fd<1.2?2.4:1);if(f.v.length()>vmax)f.v.setLength(vmax);f.v.y*=0.96;
+   f.p.addScaledVector(f.v,dt);clampWater(f.p);
+   const dir=V9_v.copy(f.v);if(dir.lengthSq()<1e-6)dir.set(0,0,1);dir.normalize();V9_q.setFromUnitVectors(V9_fz,dir);
+   V9_m4.compose(f.p,V9_q,V9_s);set.m.setMatrixAt(i,V9_m4)}
+  set.m.instanceMatrix.needsUpdate=true}}
+// ---------------------------------------------------------------- 2b) 乌龟（中华草龟样式：带盾片的背甲、腹甲、带黄纹的头颈、带爪的四肢）
+function shellTexture(){return noiseTex(512,(x,s)=>{x.fillStyle='#3d3b22';x.fillRect(0,0,s,s);
+ const sc=(pts,base)=>{x.beginPath();pts.forEach(([u,v],k)=>k?x.lineTo(u*s,v*s):x.moveTo(u*s,v*s));x.closePath();const cx=pts.reduce((a,p)=>a+p[0],0)/pts.length*s,cy=pts.reduce((a,p)=>a+p[1],0)/pts.length*s;
+  const g=x.createRadialGradient(cx,cy,2,cx,cy,s*0.12);g.addColorStop(0,base[0]);g.addColorStop(0.55,base[1]);g.addColorStop(1,base[2]);x.fillStyle=g;x.fill();x.lineWidth=s*0.012;x.strokeStyle='#17160c';x.stroke();
+  x.save();x.clip();x.strokeStyle='rgba(20,18,8,.35)';x.lineWidth=1.5;for(let r=s*0.02;r<s*0.14;r+=s*0.018){x.beginPath();x.arc(cx,cy,r,0,7);x.stroke()}x.restore()};
+ const B0=['#6d6a3a','#4f4c28','#34321a'];
+ for(let i=0;i<5;i++){const v0=0.14+i*0.145,v1=v0+0.145;sc([[0.42,v0],[0.58,v0],[0.62,(v0+v1)/2],[0.58,v1],[0.42,v1],[0.38,(v0+v1)/2]],B0)}             // vertebral
+ for(const side of [0,1])for(let i=0;i<4;i++){const v0=0.16+i*0.18,v1=v0+0.18;const a=side?0.62:0.38,b=side?0.86:0.14;sc([[a,v0],[b,v0+0.03],[b,v1-0.02],[a,v1]],['#635f34','#4a4626','#302e18'])}  // costal
+ for(let k=0;k<26;k++){const t=k/26*Math.PI*2,t2=(k+1)/26*Math.PI*2;const R1=0.44,R2=0.5;sc([[0.5+Math.cos(t)*R1,0.5+Math.sin(t)*R1],[0.5+Math.cos(t)*R2,0.5+Math.sin(t)*R2],[0.5+Math.cos(t2)*R2,0.5+Math.sin(t2)*R2],[0.5+Math.cos(t2)*R1,0.5+Math.sin(t2)*R1]],['#5a5630','#454122','#2e2c16'])}})}
+let SHELL_TEX=null;
+function limbGeo(len,r0,r1){const pts=[];for(let i=0;i<=10;i++){const t=i/10;pts.push(new THREE.Vector2(lerp(r0,r1,t)*(1+0.25*Math.sin(Math.PI*t)),t*len))}const g=new THREE.LatheGeometry(pts,14);g.scale(1,1,0.62);return g}
+function buildTurtle(swimmer){const T=new THREE.Group();T.name='Turtle';
+ const skin=new THREE.MeshStandardMaterial({color:0x4b5233,roughness:0.6,vertexColors:true});
+ const W=0.19,Lg=0.25,H=0.095;
+ const sg=new THREE.SphereGeometry(1,56,28,0,Math.PI*2,0,Math.PI/2);const p=sg.attributes.position,uv=sg.attributes.uv;
+ for(let i=0;i<p.count;i++){let x=p.getX(i),y=p.getY(i),z=p.getZ(i);const rim=1-y;x*=W*(1+0.06*rim*rim);z*=Lg*(1+0.05*rim*rim)*(z<0?1.04:1);
+  y=H*Math.pow(Math.max(y,0),0.9)+0.012*Math.exp(-((x/0.025)**2))*y+0.006*(Math.exp(-(((x-0.085)/0.02)**2))+Math.exp(-(((x+0.085)/0.02)**2)))*y;   // dome + centre keel + 2 lateral keels
+  if(rim>0.92&&z<-0.1)y+=0.01*(rim-0.92)/0.08;p.setXYZ(i,x,y,z);uv.setXY(i,x/(2*W*1.06)+0.5,z/(2*Lg*1.05)+0.5)}
+ sg.computeVertexNormals();if(!SHELL_TEX){SHELL_TEX=shellTexture();SHELL_TEX.colorSpace=THREE.SRGBColorSpace}
+ const shell=new THREE.Mesh(sg,new THREE.MeshStandardMaterial({map:SHELL_TEX,bumpMap:SHELL_TEX,bumpScale:2.2,roughness:0.5,metalness:0.05}));shell.position.y=0.05;T.add(shell);
+ const pg=new THREE.CircleGeometry(1,40);pg.scale(W*0.92,Lg*0.9,1);const plast=new THREE.Mesh(pg,new THREE.MeshStandardMaterial({color:0xb8a874,roughness:0.7,side:THREE.DoubleSide}));plast.rotation.x=Math.PI/2;plast.position.y=0.05;T.add(plast);
+ // head + neck: lathe body with yellow lateral stripes in vertex colours
+ const hp=[[0.0,0.0],[0.016,0.004],[0.03,0.02],[0.038,0.05],[0.036,0.085],[0.03,0.11],[0.032,0.14],[0.028,0.165],[0.012,0.185],[0.0,0.19]].map(([r,z])=>new THREE.Vector2(r,z));
+ const hg=new THREE.LatheGeometry(hp,20);hg.scale(1,1,0.8);hg.rotateX(Math.PI/2);const hc=[],hpos=hg.attributes.position;
+ for(let i=0;i<hpos.count;i++){const x=hpos.getX(i),y=hpos.getY(i),z=hpos.getZ(i);const a=Math.atan2(y,x);const s=Math.abs(Math.sin(a*3+z*30))<0.12&&y>-0.01;hc.push(...(s?[0.72,0.68,0.25]:(y<-0.012?[0.62,0.6,0.42]:[0.3,0.34,0.2])))}
+ hg.setAttribute('color',new THREE.Float32BufferAttribute(hc,3));const neck=new THREE.Group();neck.position.set(0,0.06,Lg*0.82);const head=new THREE.Mesh(hg,skin);head.position.z=-0.07;neck.add(head);
+ for(const s of [1,-1]){const e=new THREE.Mesh(new THREE.SphereGeometry(0.0085,12,8),new THREE.MeshStandardMaterial({color:0x101008,roughness:0.15}));e.position.set(0.024*s,0.012,0.075);neck.add(e)}
+ T.add(neck);
+ const legs=[];const limbM=new THREE.MeshStandardMaterial({color:0x4a4f31,roughness:0.65});const clawM=new THREE.MeshStandardMaterial({color:0xcfc6a0,roughness:0.4});
+ for(const [sx,sz,front] of [[1,1,1],[-1,1,1],[1,-1,0],[-1,-1,0]]){const piv=new THREE.Group();piv.position.set(sx*W*0.78,0.045,sz*Lg*0.62);
+  const lg=new THREE.Mesh(limbGeo(front?0.11:0.09,0.03,0.024),limbM);lg.rotation.z=-sx*Math.PI/2*1.15;   // out and slightly down to the ground
+   piv.add(lg);
+  const foot=new THREE.Group();foot.position.set(sx*(front?0.1:0.083),-0.02,0);piv.add(foot);
+  const pad=new THREE.Mesh(new THREE.SphereGeometry(0.028,14,10),limbM);pad.scale.set(1.15,0.42,1.2);foot.add(pad);
+  for(let k=0;k<4;k++){const c=new THREE.Mesh(new THREE.ConeGeometry(0.0045,0.022,8),clawM);c.rotation.x=Math.PI/2;c.position.set((k-1.5)*0.013,-0.004,0.03+(k===1||k===2?0.004:0));foot.add(c)}
+  T.add(piv);legs.push({piv,sx,sz,front})}
+ const tail=new THREE.Mesh(limbGeo(0.07,0.018,0.004),limbM);tail.rotation.x=-Math.PI/2*0.8;tail.position.set(0,0.05,-Lg*0.95);T.add(tail);
+ T.traverse(o=>{if(o.isMesh){o.castShadow=!IS_MOBILE;o.receiveShadow=true}});
+ const scale=swimmer?1.15:1.35;T.scale.setScalar(scale);
+ return{T,neck,legs,swimmer,scale,heading:r9()*6.28,phase:0,tgt:new THREE.Vector3(),tT:0,scared:0,retract:0,speed:0}}
+function buildTurtles(){const spots=IS_MOBILE?[[1.6,2.2,0],[-2.2,1.2,1]]:[[1.6,2.2,0],[-2.2,1.2,1],[3.8,-3.2,0]];
+ for(const [x,z,sw] of spots){const t=buildTurtle(!!sw);t.T.position.set(x,sw?-0.95:FLOOR_Y,z);scene.add(t.T);V9.turtles.push(t)}}
+function turtleUpdate(dt){const L=lampInfo(),F=frog.position;
+ for(const t of V9.turtles){const P=t.T.position;const fd=Math.hypot(P.x-F.x,P.z-F.z)+Math.abs(P.y-F.y)*0.5;
+  if(fd<1.5&&t.scared<=0)t.scared=3.0;                                      // startled: stop and pull the head in, then wander off
+  t.scared=Math.max(0,t.scared-dt);t.tT-=dt;
+  if(t.tT<=0||Math.hypot(t.tgt.x-P.x,t.tgt.z-P.z)<0.3){const a=r9()*6.28,r=1+r9()*(POND_R-6);t.tgt.set(Math.cos(a)*r,0,Math.sin(a)*r);t.tT=10+r9()*10}
+  let goal=t.tgt,want=t.swimmer?0.12:0.07;
+  if(t.scared>1.2){want=0}else if(t.scared>0){goal=V9_v.set(P.x+(P.x-F.x),0,P.z+(P.z-F.z));want*=1.8}
+  else if(L&&inBeam(P,L)&&P.distanceTo(L.o)>1.7){goal=V9_v.copy(L.o).setY(0);want*=0.8}    // walks toward the lamp light
+  const desired=Math.atan2(goal.x-P.x,goal.z-P.z);let d=desired-t.heading;d=Math.atan2(Math.sin(d),Math.cos(d));t.heading+=THREE.MathUtils.clamp(d,-0.6*dt,0.6*dt);
+  t.speed+=(want-t.speed)*Math.min(1,dt*2);P.x+=Math.sin(t.heading)*t.speed*dt;P.z+=Math.cos(t.heading)*t.speed*dt;
+  if(Math.hypot(P.x,P.z)>POND_R-2){t.tgt.set(0,0,0);t.tT=6}
+  t.phase+=dt*(0.6+t.speed*14);const ph=t.phase;
+  t.retract+=((t.scared>0?1:0)-t.retract)*Math.min(1,dt*6);t.neck.position.z=0.205-0.09*t.retract;t.neck.rotation.y=Math.sin(ph*0.37)*0.25*(1-t.retract);t.neck.rotation.x=Math.sin(ph*0.5)*0.06;
+  if(L&&inBeam(P,L)&&!t.scared){const look=Math.atan2(L.o.x-P.x,L.o.z-P.z)-t.heading;t.neck.rotation.y=THREE.MathUtils.clamp(Math.atan2(Math.sin(look),Math.cos(look)),-0.7,0.7)}
+  for(const l of t.legs){if(t.swimmer){const s=Math.sin(ph*1.4+(l.front?0:Math.PI*0.6));l.piv.rotation.set(0,(l.front?0.9:0.5)*s*l.sx,(l.front?0.35:0.2)*Math.cos(ph*1.4)*l.sx)}   // paddling strokes
+   else{const s=Math.sin(ph+((l.sx*l.sz>0)?0:Math.PI));l.piv.rotation.set(0,0.55*s*l.sx*(t.speed>0.01?1:0.15),Math.max(0,Math.cos(ph+((l.sx*l.sz>0)?0:Math.PI)))*0.22*l.sx)}   // diagonal-pair crawl
+   l.piv.scale.setScalar(1-0.35*t.retract)}
+  if(t.swimmer){P.y=lerp(FLOOR_Y+0.5,WY-0.5,0.5+0.5*Math.sin(V9.t*0.12+1.3));t.T.rotation.set(Math.sin(ph*1.4)*0.04,t.heading,Math.sin(ph*0.7)*0.05)}
+  else{P.y=FLOOR_Y+Math.abs(Math.sin(ph))*0.006*(t.speed>0.01?1:0);t.T.rotation.set(0,t.heading,Math.sin(ph)*0.03*(t.speed>0.01?1:0))}}}
+// ---------------------------------------------------------------- 3) 小地图
+function buildMinimap(){const wrap=document.createElement('div');wrap.id='mm';
+ wrap.innerHTML='<canvas id="mmc"></canvas><div class="mmb"><button id="mmIn" title="放大">＋</button><button id="mmOut" title="缩小">－</button><button id="mmX" title="收起 (M)">×</button></div><div class="mmlab">小地图 · M</div>';
+ document.body.appendChild(wrap);const btn=document.createElement('button');btn.id='mmShow';btn.textContent='🗺 地图';btn.title='显示小地图 (M)';document.body.appendChild(btn);
+ const st=document.createElement('style');st.textContent=`#mm{position:fixed;left:16px;bottom:52px;width:188px;height:188px;z-index:7;border-radius:50%;box-shadow:0 6px 20px #0008;}
+#mmc{width:100%;height:100%;border-radius:50%;display:block;background:#0a1626}.mmb{position:absolute;right:-6px;top:-4px;display:flex;flex-direction:column;gap:4px}
+.mmb button,#mmShow{border:1px solid #9fc4ff66;background:rgba(10,22,40,.85);color:#e8f1ff;border-radius:50%;width:28px;height:28px;font-size:15px;line-height:1;cursor:pointer;padding:0}
+#mmShow{position:fixed;left:16px;bottom:52px;width:auto;height:30px;border-radius:15px;padding:0 12px;z-index:7;display:none;font-family:inherit}
+.mmlab{position:absolute;left:0;right:0;bottom:-18px;text-align:center;font-size:11px;color:#bcd3f0;text-shadow:0 1px 2px #000}
+body.mmoff #mm{display:none}body.mmoff #mmShow{display:block}
+@media (max-width:760px){#mm{left:auto;right:10px;bottom:auto;top:var(--mmTop,150px);width:118px;height:118px}.mmb button{width:24px;height:24px;font-size:13px}.mmb{right:-4px}
+ #mmShow{left:auto;right:10px;bottom:auto;top:var(--mmTop,150px)}}`;document.head.appendChild(st);
+ const cv=$('#mmc');V9.mm.cv=cv;V9.mm.ctx=cv.getContext('2d');
+ $('#mmIn').onclick=()=>setZoom(V9.mm.zoom*2);$('#mmOut').onclick=()=>setZoom(V9.mm.zoom/2);$('#mmX').onclick=()=>toggleMinimap(false);$('#mmShow').onclick=()=>toggleMinimap(true);
+ toggleMinimap(V9.mm.on,true);placeMinimap();addEventListener('resize',placeMinimap)}
+function placeMinimap(){const h=$('#hud');if(h)document.documentElement.style.setProperty('--mmTop',(h.getBoundingClientRect().bottom+10)+'px')}
+function setZoom(z){V9.mm.zoom=THREE.MathUtils.clamp(z,1,4)}
+function toggleMinimap(on,silent){if(on===undefined)on=!V9.mm.on;V9.mm.on=on;document.body.classList.toggle('mmoff',!on);const c=$('#mmOn');if(c)c.checked=on;if(!silent)toast(on?'小地图：显示（M）':'小地图：收起（M）')}
+function drawMinimap(){if(!V9.mm.on)return;const cv=V9.mm.cv,dpr=Math.min(devicePixelRatio,2),S=Math.round(cv.clientWidth*dpr);if(!S)return;if(cv.width!==S){cv.width=cv.height=S}
+ const x=V9.mm.ctx,R=S/2,F=frog.position,z=V9.mm.zoom;const span=(POND_R+1)/z;const cx=z>1?F.x:0,cz=z>1?F.z:0;
+ const W2M=(wx,wz)=>[R+(wx-cx)/span*R*0.94,R+(wz-cz)/span*R*0.94];V9.mm.map=W2M;
+ x.save();x.clearRect(0,0,S,S);x.beginPath();x.arc(R,R,R,0,7);x.clip();x.fillStyle='#07111d';x.fillRect(0,0,S,S);
+ let [px,py]=W2M(0,0);x.fillStyle='#0f2c3a';x.beginPath();x.arc(px,py,POND_R/span*R*0.94,0,7);x.fill();x.strokeStyle='#5f8fb0';x.lineWidth=1.5*dpr;x.stroke();   // pond boundary
+ for(const p of PADS){const [a,b]=W2M(p.x,p.z);x.fillStyle=p.flower?'#4f8a3a':'#3e7330';x.beginPath();x.arc(a,b,Math.max(1.2*dpr,p.r/span*R*0.94),0,7);x.fill();
+  if(p.flower){x.fillStyle='#f2b8d2';x.beginPath();x.arc(a,b,1.6*dpr,0,7);x.fill()}}
+ // view fan: camera direction + horizontal FOV, radius ~ fog visibility
+ const cd=new THREE.Vector3();camera.getWorldDirection(cd);const yawC=Math.atan2(cd.x,cd.z);const hf=Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov)/2)*camera.aspect);
+ const [fx,fy]=W2M(F.x,F.z);const vr=Math.min(10,POND_R)/span*R*0.94;
+ x.fillStyle='rgba(255,236,150,.18)';x.strokeStyle='rgba(255,236,150,.55)';x.lineWidth=1*dpr;x.beginPath();x.moveTo(fx,fy);
+ for(let k=0;k<=16;k++){const a=yawC-hf+2*hf*k/16;x.lineTo(fx+Math.sin(a)*vr,fy+Math.cos(a)*vr)}x.closePath();x.fill();x.stroke();
+ if(V9.lampOn){x.fillStyle='rgba(255,250,210,.28)';x.beginPath();x.moveTo(fx,fy);for(let k=0;k<=8;k++){const a=CTRL.yaw-0.36+0.72*k/8;x.lineTo(fx+Math.sin(a)*vr*0.55,fy+Math.cos(a)*vr*0.55)}x.closePath();x.fill()}
+ // frog: dot + heading arrow
+ x.translate(fx,fy);x.rotate(-CTRL.yaw);x.fillStyle='#ffd34d';x.strokeStyle='#1b1300';x.lineWidth=1.2*dpr;x.beginPath();x.moveTo(0,7*dpr);x.lineTo(-4.5*dpr,-4*dpr);x.lineTo(0,-2*dpr);x.lineTo(4.5*dpr,-4*dpr);x.closePath();x.fill();x.stroke();
+ x.restore();x.fillStyle='rgba(220,235,255,.8)';x.font=`${10*dpr}px sans-serif`;x.textAlign='center';x.fillText('N',R,12*dpr);x.fillText(z>1?z+'×':'',R,S-8*dpr);
+ V9.mm.frogPx=[fx/dpr,fy/dpr]}
+// ---------------------------------------------------------------- init / update / keys / UI
+function initV9(){attachHeadlamp();buildFish();buildTurtles();buildMinimap();
+ const row=document.createElement('div');row.className='row';row.innerHTML='<label class="tog"><input type="checkbox" id="lampOn">头灯（L）</label><label class="tog"><input type="checkbox" id="mmOn">小地图（M）</label>';
+ const after=$('#vestOn')&&$('#vestOn').closest('.row');if(after)after.after(row);$('#lampOn').onchange=e=>setLamp(e.target.checked);$('#mmOn').checked=V9.mm.on;$('#mmOn').onchange=e=>toggleMinimap(e.target.checked);
+ const lb=document.createElement('button');lb.id='lampBtn';lb.textContent='🔦 头灯';lb.onclick=()=>setLamp(!V9.lampOn);$('#hud .modes').appendChild(lb);
+ addEventListener('keydown',e=>{if(TYPING()||e.repeat)return;const k=e.key.toLowerCase();if(k==='l')setLamp(!V9.lampOn);else if(k==='m')toggleMinimap()});
+ V9.ready=true}
+function v9Update(dt){if(!V9.ready)return;V9.t+=dt;
+ if(V9.lamp){const under=frog.position.y<WY-0.15;const want=V9.lampOn?(under?9:6):0;V9.spot.intensity+=(want-V9.spot.intensity)*Math.min(1,dt*10);V9.beamMat.uniforms.uI.value=V9.lampOn?(under?0.5:0.28):0;
+  $('#lampBtn').classList.toggle('on',V9.lampOn)}
+ fishUpdate(dt);turtleUpdate(dt);drawMinimap()}
+function v9State(){const L=V9.lamp;const wp=new THREE.Vector3();if(L)L.getWorldPosition(wp);const mmEl=$('#mm');const rect=mmEl&&V9.mm.on?mmEl.getBoundingClientRect():null;
+ return{mobile:IS_MOBILE,lamp:{on:V9.lampOn,intensity:V9.spot?V9.spot.intensity:0,parent:L&&L.parent?L.parent.name:null,pos:[wp.x,wp.y,wp.z],beam:V9.beam?V9.beam.visible:false,meshes:L?L.children.filter(o=>o.isMesh).length:0},
+  minimap:{on:V9.mm.on,zoom:V9.mm.zoom,frogPx:V9.mm.frogPx||null,rect:rect?[rect.left,rect.top,rect.right,rect.bottom]:null},
+  fish:V9.fishSets.map(s=>({name:s.sp.name,n:s.fish.length,t:s.U.value,c:s.fish.reduce((a,f)=>a.add(f.p),new THREE.Vector3()).divideScalar(s.fish.length).toArray(),ymin:Math.min(...s.fish.map(f=>f.p.y)),ymax:Math.max(...s.fish.map(f=>f.p.y)),
+   dFrog:s.fish.reduce((a,f)=>a+f.p.distanceTo(frog.position),0)/s.fish.length,verts:s.m.geometry.attributes.position.count})),
+  turtles:V9.turtles.map(t=>({x:t.T.position.x,y:t.T.position.y,z:t.T.position.z,swimmer:t.swimmer,scared:t.scared,retract:t.retract,leg:t.legs[0].piv.rotation.y,speed:t.speed}))}}
+
 // ---------- UI misc
 document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.id===b.dataset.p));$('#panel').classList.remove('min')});
 $('#sheetT').onclick=()=>$('#panel').classList.toggle('min');
@@ -522,7 +737,7 @@ addEventListener('resize',resize);resize();resetView();
 let hold=null;const clock=new THREE.Clock();const baseSnap=new Map();let blinkT=2,blinkV=0,tAll=0;const mw={};let jawExtra=0,eyeY=0,eyeX=0;
 function setMorph(k,v){for(const m of morphMeshes){const i=m.morphTargetDictionary[k];if(i!==undefined)m.morphTargetInfluences[i]=Math.min(1,Math.max(0,v))}}
 function tick(){requestAnimationFrame(tick);const dt=Math.min(clock.getDelta(),0.05);tAll+=dt;
- sceneUpdate(dt,tAll);controllerUpdate(dt);
+ sceneUpdate(dt,tAll);controllerUpdate(dt);v9Update(dt);
  if(model){
   if(turnTarget!==null){let d=turnTarget-frog.rotation.y;d=Math.atan2(Math.sin(d),Math.cos(d));frog.rotation.y+=d*Math.min(1,dt*6);if(Math.abs(d)<0.01)turnTarget=null}
   // 每帧先撤销上一帧叠加的偏移（眨眼/张嘴/滑块/视线）：恢复到上一帧动作输出，再让 mixer 写入。
@@ -580,7 +795,7 @@ function tick(){requestAnimationFrame(tick);const dt=Math.min(clock.getDelta(),0
  }
  controls.update();renderer.render(scene,camera)}
 tick();
-window.__pond={state:()=>({mode:CTRL.mode,where:CTRL.where,x:frog.position.x,y:frog.position.y,z:frog.position.z,yaw:CTRL.yaw,jumping:!!CTRL.jump,jumpKind:CTRL.jump?CTRL.jump.kind:null,anim:cur?cur.getClip().name:null,
+window.__pond={v9:()=>v9State(),setLamp:on=>setLamp(on,true),toggleMinimap:on=>toggleMinimap(on,true),setZoom,state:()=>({mode:CTRL.mode,where:CTRL.where,x:frog.position.x,y:frog.position.y,z:frog.position.z,yaw:CTRL.yaw,jumping:!!CTRL.jump,jumpKind:CTRL.jump?CTRL.jump.kind:null,anim:cur?cur.getClip().name:null,
   animTime:cur?cur.time:0,target:[CTRL.target.x,CTRL.target.z],valid:CTRL.tvalid,reason:CTRL.treason,pad:CTRL.pad?PADS.indexOf(CTRL.pad):-1,padOff:CTRL.pad?CTRL.pad.off:0,under:camera.position.y<WY,log:CTRL.log.slice(),pads:PADS.length,preview:pathLine.visible,fog:scene.fog.density}),
  setMode,setTarget:(x,z)=>CTRL.target.set(x,0,z),placeWater:(x,z,yaw)=>{CTRL.jump=null;CTRL.where='water';CTRL.pad=null;CTRL.yaw=yaw;CTRL.vy=0;CTRL.spd=0;frog.position.set(x,SWIM_SURF,z);CTRL.lastFrog.copy(frog.position);resetView();setMode(3,true);play('swim',0)},pauseAt:t=>{CTRL.pauseAt=t},resume:()=>{CTRL.paused=false},reset:resetFrog,padInfo:i=>({x:PADS[i].x,z:PADS[i].z,r:PADS[i].r}),
  camLook:(dx,dy,dz,tx,ty,tz,fov)=>{camera.fov=fov||camera.fov;camera.updateProjectionMatrix();camera.position.set(frog.position.x+dx,frog.position.y+dy,frog.position.z+dz);controls.target.set(frog.position.x+tx,frog.position.y+ty,frog.position.z+tz);controls.update()},
