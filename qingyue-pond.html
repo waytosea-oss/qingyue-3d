@@ -707,7 +707,7 @@ function drawMinimap(){if(!V9.mm.on)return;const cv=V9.mm.cv,dpr=Math.min(device
   if(p.flower){x.fillStyle='#f2b8d2';x.beginPath();x.arc(a,b,1.6*dpr,0,7);x.fill()}}
  // view fan: camera direction + horizontal FOV, radius ~ fog visibility
  const cd=new THREE.Vector3();camera.getWorldDirection(cd);const yawC=Math.atan2(cd.x,cd.z);const hf=Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov)/2)*camera.aspect);
- const [fx,fy]=W2M(F.x,F.z);const vr=Math.min(10,POND_R)/span*R*0.94;
+ const [fx,fy]=W2M(F.x,F.z);const vis=THREE.MathUtils.clamp(1.2/scene.fog.density,3,14);V9.mm.fanR=vis;const vr=vis/span*R*0.94;
  x.fillStyle='rgba(255,236,150,.18)';x.strokeStyle='rgba(255,236,150,.55)';x.lineWidth=1*dpr;x.beginPath();x.moveTo(fx,fy);
  for(let k=0;k<=16;k++){const a=yawC-hf+2*hf*k/16;x.lineTo(fx+Math.sin(a)*vr,fy+Math.cos(a)*vr)}x.closePath();x.fill();x.stroke();
  if(V9.lampOn){x.fillStyle='rgba(255,250,210,.28)';x.beginPath();x.moveTo(fx,fy);for(let k=0;k<=8;k++){const a=CTRL.yaw-0.36+0.72*k/8;x.lineTo(fx+Math.sin(a)*vr*0.55,fy+Math.cos(a)*vr*0.55)}x.closePath();x.fill()}
@@ -733,12 +733,12 @@ const TOD={
   water:col('#0a2a30'),exp:1.05,env:0.9,rim:col('#a9c6ff'),rimK:1,ff:1,dfly:0,bank:col('#0e1a10'),reed:col('#2c3d22'),tree:col('#07110b')}};
 const WXS=['clear','overcast','rain','fog','snow','storm'],WX_NAME={clear:'晴',overcast:'阴',rain:'雨',fog:'雾',snow:'雪',storm:'雷雨'};
 // cloud cover, sky desaturation / darkening, key-light factor, fog multiplier + grey tint, particles, lightning
-const WX={clear:{cloud:0,desat:0,dark:1,keyK:1,fogK:1,fogGrey:0,rain:0,snow:0,bolt:0,wave:0.32,ffK:1,dflyK:1},
- overcast:{cloud:0.85,desat:0.55,dark:0.78,keyK:0.38,fogK:1.6,fogGrey:0.35,rain:0,snow:0,bolt:0,wave:0.36,ffK:0.8,dflyK:0.6},
- rain:{cloud:0.95,desat:0.7,dark:0.62,keyK:0.3,fogK:2.3,fogGrey:0.5,rain:1,snow:0,bolt:0,wave:0.5,ffK:0.15,dflyK:0},
- fog:{cloud:0.35,desat:0.6,dark:0.9,keyK:0.55,fogK:6.5,fogGrey:0.75,rain:0,snow:0,bolt:0,wave:0.28,ffK:0.6,dflyK:0.3},
- snow:{cloud:0.8,desat:0.75,dark:0.92,keyK:0.5,fogK:2.6,fogGrey:0.6,rain:0,snow:1,bolt:0,wave:0.22,ffK:0,dflyK:0},
- storm:{cloud:1,desat:0.8,dark:0.45,keyK:0.2,fogK:2.7,fogGrey:0.45,rain:1.6,snow:0,bolt:1,wave:0.62,ffK:0,dflyK:0}};
+const WX={clear:{cloud:0,fogAdd:0,desat:0,dark:1,keyK:1,fogK:1,fogGrey:0,rain:0,snow:0,bolt:0,wave:0.32,ffK:1,dflyK:1},
+ overcast:{fogAdd:0.004,cloud:0.85,desat:0.55,dark:0.78,keyK:0.38,fogK:1.2,fogGrey:0.35,rain:0,snow:0,bolt:0,wave:0.36,ffK:0.8,dflyK:0.6},
+ rain:{fogAdd:0.018,cloud:0.95,desat:0.7,dark:0.62,keyK:0.3,fogK:1.3,fogGrey:0.5,rain:1,snow:0,bolt:0,wave:0.5,ffK:0.15,dflyK:0},
+ fog:{fogAdd:0.1,cloud:0.35,desat:0.6,dark:0.9,keyK:0.55,fogK:1.2,fogGrey:0.75,rain:0,snow:0,bolt:0,wave:0.28,ffK:0.6,dflyK:0.3},
+ snow:{fogAdd:0.022,cloud:0.8,desat:0.75,dark:0.92,keyK:0.5,fogK:1.3,fogGrey:0.6,rain:0,snow:1,bolt:0,wave:0.22,ffK:0,dflyK:0},
+ storm:{fogAdd:0.026,cloud:1,desat:0.8,dark:0.45,keyK:0.2,fogK:1.3,fogGrey:0.45,rain:1.6,snow:0,bolt:1,wave:0.62,ffK:0,dflyK:0}};
 const KEY_DIR=MOON_DIR.clone();
 const ATMO={tod:'night',wx:'clear',wT:{day:0,dusk:0,night:1},wW:{clear:1,overcast:0,rain:0,fog:0,snow:0,storm:0},
  quality:IS_MOBILE?'low':'high',flash:0,strikes:0,nextBolt:6,thunder:false,envMaps:null,envIdx:-1,cur:null,
@@ -835,15 +835,17 @@ function dragonflyUpdate(dt,amt){const n=Math.round(amt*QUALITY[ATMO.quality].df
   d.g.rotation.set(-THREE.MathUtils.clamp(d.v.y*0.25,-0.4,0.4),d.yaw,0,'YXZ');
   for(const w of d.wings)w.piv.rotation.z=w.s*(0.12+0.6*Math.sin(V9.t*62+w.ph+d.ph))}}
 // --- apply: called every frame from sceneUpdate (works before the frog model has loaded)
-function setTod(t,instant){if(!TOD[t])return;ATMO.tod=t;if(instant)for(const k of TODS)ATMO.wT[k]=k===t?1:0;atmoUI();if(!instant)toast('时段：'+TOD_NAME[t]+'（N）')}
-function setWeather(w,instant){if(!WX[w])return;ATMO.wx=w;if(instant)for(const k of WXS)ATMO.wW[k]=k===w?1:0;if(w==='storm')ATMO.nextBolt=Math.min(ATMO.nextBolt,2.5);atmoUI();if(!instant)toast('天气：'+WX_NAME[w]+'（G）')}
+function setTod(t,instant){if(!TOD[t])return;ATMO.tod=t;if(instant){for(const k of TODS)ATMO.wT[k]=k===t?1:0;ATMO.lT={...ATMO.wT}}atmoUI();if(!instant)toast('时段：'+TOD_NAME[t]+'（N）')}
+function setWeather(w,instant){if(!WX[w])return;ATMO.wx=w;if(instant){for(const k of WXS)ATMO.wW[k]=k===w?1:0;ATMO.lW={...ATMO.wW}}if(w==='storm')ATMO.nextBolt=Math.min(ATMO.nextBolt,2.5);atmoUI();if(!instant)toast('天气：'+WX_NAME[w]+'（G）')}
 function setQuality(q){if(!QUALITY[q])return;ATMO.quality=q;const Q=QUALITY[q];rain.geometry.setDrawRange(0,Q.rain*2);snow.geometry.setDrawRange(0,Q.snow);ripples.count=Q.rip;const s=$('#quality');if(s)s.value=q}
 function atmoUI(){document.querySelectorAll('#todBtns button').forEach(b=>b.classList.toggle('on',b.dataset.tod===ATMO.tod));document.querySelectorAll('#wxBtns button').forEach(b=>b.classList.toggle('on',b.dataset.wx===ATMO.wx))}
 function bakeEnvMaps(){const es=new THREE.Scene();es.add(ENV_SKY);const U=ENV_SKY.userData.U;ATMO.envMaps={};
  for(const t of TODS){const P=TOD[t];U.top.value.copy(P.top);U.mid.value.copy(P.mid);U.hor.value.copy(P.hor);U.sd.value.copy(P.sun);U.sunCol.value.copy(P.sunCol);U.sunAmt.value=P.sunAmt;U.moonGlow.value=P.moon;
   ENV_SKY.userData.moon.material.opacity=P.moon;ENV_SKY.userData.moon.visible=P.moon>0.05;ATMO.envMaps[t]=pmrem.fromScene(es,0.02).texture}}
-function atmoUpdate(dt){const A=ATMO,k=Math.min(1,dt/1.6);   // ~2.5 s cross-fade
- for(const t of TODS)A.wT[t]+=((t===A.tod?1:0)-A.wT[t])*k;for(const w of WXS)A.wW[w]+=((w===A.wx?1:0)-A.wW[w])*k;
+const ease=(lin,out)=>{let S=0;for(const k in lin){out[k]=smooth(lin[k]);S+=out[k]}for(const k in out)out[k]/=S||1};
+function atmoUpdate(dt){const A=ATMO,st=dt/2.5;   // 2.5 s eased cross-fade
+ A.lT=A.lT||{...A.wT};A.lW=A.lW||{...A.wW};
+ for(const t of TODS)A.lT[t]=THREE.MathUtils.clamp(A.lT[t]+(t===A.tod?st:-st),0,1);for(const w of WXS)A.lW[w]=THREE.MathUtils.clamp(A.lW[w]+(w===A.wx?st:-st),0,1);ease(A.lT,A.wT);ease(A.lW,A.wW);
  const WT=A.wT,WW=A.wW,U=sky.userData.U,o=A.out;
  const cloud=blendN(WX,WW,'cloud'),desat=blendN(WX,WW,'desat'),dark=blendN(WX,WW,'dark'),fogK=blendN(WX,WW,'fogK'),fogGrey=blendN(WX,WW,'fogGrey'),rainA=blendN(WX,WW,'rain'),snowA=blendN(WX,WW,'snow'),boltA=blendN(WX,WW,'bolt');
  // lightning flash envelope (double flicker)
@@ -863,7 +865,7 @@ function atmoUpdate(dt){const A=ATMO,k=Math.min(1,dt/1.6);   // ~2.5 s cross-fad
  blendC(fill.color,TOD,WT,'fill');fill.intensity=blendN(TOD,WT,'fillI')*(0.7+0.3*dark);bounce.intensity=blendN(TOD,WT,'bounceI');
  const rimC=blendC(_c2,TOD,WT,'rim').multiplyScalar(blendN(TOD,WT,'rimK'));for(const u of RIM.uniforms){if(!u.base)u.base=u.value.clone().multiply(new THREE.Color(1/RIM.color.r,1/RIM.color.g,1/RIM.color.b));u.value.copy(u.base).multiply(rimC)}
  // fog / water / shore
- wxShade(blendC(o.fogC,TOD,WT,'fog'),fogGrey,1);if(fogGrey>0.3)o.fogC.lerp(_c.copy(U.hor.value),0.35);o.fogD=blendN(TOD,WT,'fogD')*fogK;
+ wxShade(blendC(o.fogC,TOD,WT,'fog'),fogGrey,1);if(fogGrey>0.3)o.fogC.lerp(_c.copy(U.hor.value),0.35);o.fogD=blendN(TOD,WT,'fogD')*fogK+blendN(WX,WW,'fogAdd');
  blendC(o.underC,TOD,WT,'under').multiplyScalar(0.75+0.25*dark);o.underD=blendN(TOD,WT,'underD');o.exp=blendN(TOD,WT,'exp');
  wxShade(blendC(waterMat.color,TOD,WT,'water'),desat*0.4,1);const wave=blendN(WX,WW,'wave');waterMat.normalScale.set(wave,wave);
  blendC(SHORE.bank.color,TOD,WT,'bank');blendC(SHORE.reed.color,TOD,WT,'reed');blendC(SHORE.tree.color,TOD,WT,'tree');
@@ -925,10 +927,12 @@ function v9Update(dt){V9.t+=dt;atmoUpdate(dt);if(!V9.ready)return;
   $('#lampBtn').classList.toggle('on',V9.lampOn)}
  fishUpdate(dt);turtleUpdate(dt);V9.mmT=(V9.mmT||0)-dt;if(V9.mmT<=0){V9.mmT=0.5;placeMinimap()}drawMinimap()}
 function v9State(){const L=V9.lamp;const wp=new THREE.Vector3();if(L)L.getWorldPosition(wp);const mmEl=$('#mm');const rect=mmEl&&V9.mm.on?mmEl.getBoundingClientRect():null;
- return{mobile:IS_MOBILE,lamp:{on:V9.lampOn,intensity:V9.spot?V9.spot.intensity:0,parent:L&&L.parent?L.parent.name:null,pos:[wp.x,wp.y,wp.z],beam:V9.beam?V9.beam.visible:false,meshes:L?L.children.filter(o=>o.isMesh).length:0},
-  minimap:{on:V9.mm.on,zoom:V9.mm.zoom,frogPx:V9.mm.frogPx||null,rect:rect?[rect.left,rect.top,rect.right,rect.bottom]:null},
+ const hb=B('head'),hp=new THREE.Vector3();if(hb)hb.getWorldPosition(hp);
+ return{mobile:IS_MOBILE,lamp:{on:V9.lampOn,headD:wp.distanceTo(hp),headPos:[hp.x,hp.y,hp.z],intensity:V9.spot?V9.spot.intensity:0,parent:L&&L.parent?L.parent.name:null,pos:[wp.x,wp.y,wp.z],beam:V9.beam?V9.beam.visible:false,meshes:L?L.children.filter(o=>o.isMesh).length:0},
+  minimap:{on:V9.mm.on,zoom:V9.mm.zoom,fanR:V9.mm.fanR||0,frogPx:V9.mm.frogPx||null,rect:rect?[rect.left,rect.top,rect.right,rect.bottom]:null},
   fish:V9.fishSets.map(s=>({name:s.sp.name,n:s.fish.length,t:s.U.value,c:s.fish.reduce((a,f)=>a.add(f.p),new THREE.Vector3()).divideScalar(s.fish.length).toArray(),ymin:Math.min(...s.fish.map(f=>f.p.y)),ymax:Math.max(...s.fish.map(f=>f.p.y)),
    dFrog:s.fish.reduce((a,f)=>a+f.p.distanceTo(frog.position),0)/s.fish.length,verts:s.m.geometry.attributes.position.count})),
+  schools:V9.fishSets.flatMap((s,si)=>s.schools.map(sc=>{const fs=s.fish.filter(f=>f.school===sc);return{set:si,c:sc.c.toArray(),dFrog:fs.reduce((a,f)=>a+f.p.distanceTo(frog.position),0)/fs.length}})),
   turtles:V9.turtles.map(t=>({x:t.T.position.x,y:t.T.position.y,z:t.T.position.z,swimmer:t.swimmer,scared:t.scared,retract:t.retract,leg:t.legs[0].piv.rotation.y,speed:t.speed}))}}
 
 // ---------- UI misc
