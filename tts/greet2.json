@@ -1,0 +1,93 @@
+{
+ "id": "greet2",
+ "group": "问候",
+ "text": "呱呱，今天也要做个爱护湿地的小侦探哦！",
+ "file": "greet2.mp3",
+ "voice": "zh-CN-XiaoyiNeural",
+ "rate": "+6%",
+ "pitch": "+6Hz",
+ "key": "831a2f43",
+ "duration": 4.268,
+ "words": [
+  {
+   "type": "WordBoundary",
+   "t": 0.097,
+   "d": 0.531,
+   "text": "呱呱"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.899,
+   "d": 0.531,
+   "text": "今天"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.442,
+   "d": 0.106,
+   "text": "也"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.548,
+   "d": 0.118,
+   "text": "要"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.677,
+   "d": 0.141,
+   "text": "做"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.819,
+   "d": 0.094,
+   "text": "个"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.925,
+   "d": 0.271,
+   "text": "爱护"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.208,
+   "d": 0.283,
+   "text": "湿地"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.491,
+   "d": 0.083,
+   "text": "的"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.585,
+   "d": 0.153,
+   "text": "小"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.739,
+   "d": 0.389,
+   "text": "侦探"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 3.128,
+   "d": 0.177,
+   "text": "哦"
+  }
+ ],
+ "sentences": [
+  {
+   "type": "SentenceBoundary",
+   "t": 0.1,
+   "d": 4.018,
+   "text": "呱呱，今天也要做个爱护湿地的小侦探哦！"
+  }
+ ]
+}

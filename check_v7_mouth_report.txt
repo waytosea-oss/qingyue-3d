@@ -1,0 +1,17 @@
+[v8] mouth-corner vertices: 16 (x = -0.341 .. 0.342 m)
+  shape key mouth_open at 1.0: corner lateral |dx| max 0.000 mm, vertical |dz| max 0.54 mm 
+  shape key viseme_A   at 1.0: corner lateral |dx| max 0.000 mm, vertical |dz| max 0.44 mm 
+  shape key viseme_O   at 1.0: corner lateral |dx| max 0.000 mm, vertical |dz| max 0.33 mm 
+  shape key viseme_E   at 1.0: corner lateral |dx| max 0.000 mm, vertical |dz| max 0.22 mm 
+  shape key viseme_U   at 1.0: corner lateral |dx| max 0.000 mm, vertical |dz| max 0.16 mm 
+  shape key smile      at 1.0: corner lateral |dx| max 10.196 mm, vertical |dz| max 22.00 mm (static default expression, not driven by speech)
+  jaw bone  2 deg: corner lateral |dx| max 0.000 mm, vertical |dz| max 0.32 mm
+  jaw bone  4 deg: corner lateral |dx| max 0.000 mm, vertical |dz| max 0.64 mm
+  jaw bone  8 deg: corner lateral |dx| max 0.000 mm, vertical |dz| max 1.29 mm
+  jaw bone 12 deg: corner lateral |dx| max 0.000 mm, vertical |dz| max 1.94 mm
+  jaw bone 16 deg: corner lateral |dx| max 0.000 mm, vertical |dz| max 2.59 mm
+  jaw bone 20 deg: corner lateral |dx| max 0.000 mm, vertical |dz| max 3.24 mm
+  jaw bone 22 deg: corner lateral |dx| max 0.000 mm, vertical |dz| max 3.56 mm
+  jaw bone 24 deg: corner lateral |dx| max 0.000 mm, vertical |dz| max 3.88 mm
+  talk action, all 48 frames (head frame): corner lateral |dx| max 0.000 mm, vertical |dz| max 3.56 mm
+  RESULT [v8]: worst corner lateral displacement during speech = 0.000 mm -> PASS (limit 0.5 mm)

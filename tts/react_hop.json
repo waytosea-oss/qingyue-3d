@@ -1,0 +1,45 @@
+{
+ "id": "react_hop",
+ "group": "动作反应",
+ "text": "向前蹦一蹦！",
+ "file": "react_hop.mp3",
+ "voice": "zh-CN-XiaoyiNeural",
+ "rate": "+6%",
+ "pitch": "+6Hz",
+ "key": "f1288312",
+ "duration": 2.04,
+ "words": [
+  {
+   "type": "WordBoundary",
+   "t": 0.097,
+   "d": 0.495,
+   "text": "向前"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.604,
+   "d": 0.165,
+   "text": "蹦"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.769,
+   "d": 0.106,
+   "text": "一"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.875,
+   "d": 0.2,
+   "text": "蹦"
+  }
+ ],
+ "sentences": [
+  {
+   "type": "SentenceBoundary",
+   "t": 0.1,
+   "d": 1.79,
+   "text": "向前蹦一蹦！"
+  }
+ ]
+}

@@ -1,0 +1,57 @@
+{
+ "id": "vest_on",
+ "group": "背心",
+ "text": "穿上科考背心，出发去考察！",
+ "file": "vest_on.mp3",
+ "voice": "zh-CN-XiaoyiNeural",
+ "rate": "+6%",
+ "pitch": "+6Hz",
+ "key": "bedf9afa",
+ "duration": 3.372,
+ "words": [
+  {
+   "type": "WordBoundary",
+   "t": 0.097,
+   "d": 0.389,
+   "text": "穿上"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.498,
+   "d": 0.307,
+   "text": "科考"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.817,
+   "d": 0.448,
+   "text": "背心"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.442,
+   "d": 0.342,
+   "text": "出发"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.795,
+   "d": 0.106,
+   "text": "去"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.913,
+   "d": 0.495,
+   "text": "考察"
+  }
+ ],
+ "sentences": [
+  {
+   "type": "SentenceBoundary",
+   "t": 0.1,
+   "d": 3.122,
+   "text": "穿上科考背心，出发去考察！"
+  }
+ ]
+}

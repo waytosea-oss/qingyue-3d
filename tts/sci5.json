@@ -1,0 +1,111 @@
+{
+ "id": "sci5",
+ "group": "科普",
+ "text": "我爱吃昆虫，春夏在稻田池塘产卵，冬天就钻进泥里冬眠。",
+ "file": "sci5.mp3",
+ "voice": "zh-CN-XiaoyiNeural",
+ "rate": "+6%",
+ "pitch": "+6Hz",
+ "key": "4b3bb4bf",
+ "duration": 6.073,
+ "words": [
+  {
+   "type": "WordBoundary",
+   "t": 0.097,
+   "d": 0.141,
+   "text": "我"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.239,
+   "d": 0.141,
+   "text": "爱"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.38,
+   "d": 0.153,
+   "text": "吃"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.545,
+   "d": 0.519,
+   "text": "昆虫"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.265,
+   "d": 0.46,
+   "text": "春夏"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.736,
+   "d": 0.141,
+   "text": "在"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.89,
+   "d": 0.448,
+   "text": "稻田"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.35,
+   "d": 0.33,
+   "text": "池塘"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.692,
+   "d": 0.448,
+   "text": "产卵"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 3.434,
+   "d": 0.495,
+   "text": "冬天"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 3.942,
+   "d": 0.118,
+   "text": "就"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 4.071,
+   "d": 0.318,
+   "text": "钻进"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 4.39,
+   "d": 0.13,
+   "text": "泥"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 4.519,
+   "d": 0.118,
+   "text": "里"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 4.649,
+   "d": 0.46,
+   "text": "冬眠"
+  }
+ ],
+ "sentences": [
+  {
+   "type": "SentenceBoundary",
+   "t": 0.1,
+   "d": 5.823,
+   "text": "我爱吃昆虫，春夏在稻田池塘产卵，冬天就钻进泥里冬眠。"
+  }
+ ]
+}

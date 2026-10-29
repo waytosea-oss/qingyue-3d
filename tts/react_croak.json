@@ -1,0 +1,75 @@
+{
+ "id": "react_croak",
+ "group": "动作反应",
+ "text": "呱——呱——！听，这是我的歌声！",
+ "file": "react_croak.mp3",
+ "voice": "zh-CN-XiaoyiNeural",
+ "rate": "+6%",
+ "pitch": "+6Hz",
+ "key": "d879201d",
+ "duration": 4.03,
+ "words": [
+  {
+   "type": "WordBoundary",
+   "t": 0.097,
+   "d": 0.366,
+   "text": "呱"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.793,
+   "d": 0.33,
+   "text": "呱"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.651,
+   "d": 0.33,
+   "text": "听"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.229,
+   "d": 0.165,
+   "text": "这"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.394,
+   "d": 0.083,
+   "text": "是"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.488,
+   "d": 0.094,
+   "text": "我"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.583,
+   "d": 0.083,
+   "text": "的"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.677,
+   "d": 0.436,
+   "text": "歌声"
+  }
+ ],
+ "sentences": [
+  {
+   "type": "SentenceBoundary",
+   "t": 0.1,
+   "d": 1.554,
+   "text": "呱——呱——！"
+  },
+  {
+   "type": "SentenceBoundary",
+   "t": 1.604,
+   "d": 2.276,
+   "text": "听，这是我的歌声！"
+  }
+ ]
+}

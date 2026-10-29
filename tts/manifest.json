@@ -1,0 +1,159 @@
+{
+ "voice": "zh-CN-XiaoyiNeural",
+ "rate": "+6%",
+ "pitch": "+6Hz",
+ "lines": [
+  {
+   "id": "intro",
+   "group": "开场",
+   "text": "你好呀，我是青跃，一只黑斑侧褶蛙，住在浅滩蛙鸣湾。",
+   "file": "intro.mp3",
+   "duration": 5.495,
+   "timeline": "intro.json"
+  },
+  {
+   "id": "greet1",
+   "group": "问候",
+   "text": "嗨，小朋友，欢迎来到凤凰岛！",
+   "file": "greet1.mp3",
+   "duration": 3.596,
+   "timeline": "greet1.json"
+  },
+  {
+   "id": "greet2",
+   "group": "问候",
+   "text": "呱呱，今天也要做个爱护湿地的小侦探哦！",
+   "file": "greet2.mp3",
+   "duration": 4.268,
+   "timeline": "greet2.json"
+  },
+  {
+   "id": "sci1",
+   "group": "科普",
+   "text": "我是湿地的体温计，水一生病，我最先知道。",
+   "file": "sci1.mp3",
+   "duration": 4.233,
+   "timeline": "sci1.json"
+  },
+  {
+   "id": "sci2",
+   "group": "科普",
+   "text": "两栖动物皮肤很敏感，所以我们是水质健康的指示物种哦！",
+   "file": "sci2.mp3",
+   "duration": 5.542,
+   "timeline": "sci2.json"
+  },
+  {
+   "id": "sci3",
+   "group": "科普",
+   "text": "跟我一起，做一次水质小侦探吧！",
+   "file": "sci3.mp3",
+   "duration": 3.443,
+   "timeline": "sci3.json"
+  },
+  {
+   "id": "sci4",
+   "group": "科普",
+   "text": "夜晚的蛙鸣，就是我们在唱歌——呱呱呱！",
+   "file": "sci4.mp3",
+   "duration": 4.08,
+   "timeline": "sci4.json"
+  },
+  {
+   "id": "sci5",
+   "group": "科普",
+   "text": "我爱吃昆虫，春夏在稻田池塘产卵，冬天就钻进泥里冬眠。",
+   "file": "sci5.mp3",
+   "duration": 6.073,
+   "timeline": "sci5.json"
+  },
+  {
+   "id": "sci6",
+   "group": "科普",
+   "text": "我的背上有两条侧褶，就像两道小小的山脊。",
+   "file": "sci6.mp3",
+   "duration": 4.528,
+   "timeline": "sci6.json"
+  },
+  {
+   "id": "react_croak",
+   "group": "动作反应",
+   "text": "呱——呱——！听，这是我的歌声！",
+   "file": "react_croak.mp3",
+   "duration": 4.03,
+   "timeline": "react_croak.json"
+  },
+  {
+   "id": "react_wave",
+   "group": "动作反应",
+   "text": "嗨！你好呀！",
+   "file": "react_wave.mp3",
+   "duration": 2.284,
+   "timeline": "react_wave.json"
+  },
+  {
+   "id": "react_jump",
+   "group": "动作反应",
+   "text": "嘿呀！看我跳得多高！",
+   "file": "react_jump.mp3",
+   "duration": 2.98,
+   "timeline": "react_jump.json"
+  },
+  {
+   "id": "react_hop",
+   "group": "动作反应",
+   "text": "向前蹦一蹦！",
+   "file": "react_hop.mp3",
+   "duration": 2.04,
+   "timeline": "react_hop.json"
+  },
+  {
+   "id": "react_spin",
+   "group": "动作反应",
+   "text": "转个圈圈，真开心！",
+   "file": "react_spin.mp3",
+   "duration": 2.724,
+   "timeline": "react_spin.json"
+  },
+  {
+   "id": "react_sleep",
+   "group": "动作反应",
+   "text": "呼……我先眯一会儿。",
+   "file": "react_sleep.mp3",
+   "duration": 2.629,
+   "timeline": "react_sleep.json"
+  },
+  {
+   "id": "react_look",
+   "group": "动作反应",
+   "text": "咦？那边有什么呀？",
+   "file": "react_look.mp3",
+   "duration": 2.839,
+   "timeline": "react_look.json"
+  },
+  {
+   "id": "react_talk",
+   "group": "动作反应",
+   "text": "想听我讲湿地的故事吗？",
+   "file": "react_talk.mp3",
+   "duration": 2.688,
+   "timeline": "react_talk.json"
+  },
+  {
+   "id": "vest_on",
+   "group": "背心",
+   "text": "穿上科考背心，出发去考察！",
+   "file": "vest_on.mp3",
+   "duration": 3.372,
+   "timeline": "vest_on.json"
+  },
+  {
+   "id": "vest_off",
+   "group": "背心",
+   "text": "先把背心脱下来，歇一歇。",
+   "file": "vest_off.mp3",
+   "duration": 3.066,
+   "timeline": "vest_off.json"
+  }
+ ]
+}

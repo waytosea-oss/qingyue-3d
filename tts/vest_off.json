@@ -1,0 +1,69 @@
+{
+ "id": "vest_off",
+ "group": "背心",
+ "text": "先把背心脱下来，歇一歇。",
+ "file": "vest_off.mp3",
+ "voice": "zh-CN-XiaoyiNeural",
+ "rate": "+6%",
+ "pitch": "+6Hz",
+ "key": "411f01d0",
+ "duration": 3.066,
+ "words": [
+  {
+   "type": "WordBoundary",
+   "t": 0.097,
+   "d": 0.271,
+   "text": "先"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.368,
+   "d": 0.118,
+   "text": "把"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.498,
+   "d": 0.342,
+   "text": "背心"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.852,
+   "d": 0.177,
+   "text": "脱"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.029,
+   "d": 0.307,
+   "text": "下来"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.559,
+   "d": 0.189,
+   "text": "歇"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.748,
+   "d": 0.106,
+   "text": "一"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.854,
+   "d": 0.248,
+   "text": "歇"
+  }
+ ],
+ "sentences": [
+  {
+   "type": "SentenceBoundary",
+   "t": 0.1,
+   "d": 2.816,
+   "text": "先把背心脱下来，歇一歇。"
+  }
+ ]
+}

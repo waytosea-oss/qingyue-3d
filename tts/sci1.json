@@ -1,0 +1,87 @@
+{
+ "id": "sci1",
+ "group": "科普",
+ "text": "我是湿地的体温计，水一生病，我最先知道。",
+ "file": "sci1.mp3",
+ "voice": "zh-CN-XiaoyiNeural",
+ "rate": "+6%",
+ "pitch": "+6Hz",
+ "key": "9e7eae0f",
+ "duration": 4.233,
+ "words": [
+  {
+   "type": "WordBoundary",
+   "t": 0.097,
+   "d": 0.118,
+   "text": "我"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.215,
+   "d": 0.106,
+   "text": "是"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.333,
+   "d": 0.295,
+   "text": "湿地"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.628,
+   "d": 0.083,
+   "text": "的"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.722,
+   "d": 0.613,
+   "text": "体温计"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.571,
+   "d": 0.2,
+   "text": "水"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.772,
+   "d": 0.094,
+   "text": "一"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.878,
+   "d": 0.389,
+   "text": "生病"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.467,
+   "d": 0.106,
+   "text": "我"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.585,
+   "d": 0.366,
+   "text": "最先"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.963,
+   "d": 0.307,
+   "text": "知道"
+  }
+ ],
+ "sentences": [
+  {
+   "type": "SentenceBoundary",
+   "t": 0.1,
+   "d": 3.983,
+   "text": "我是湿地的体温计，水一生病，我最先知道。"
+  }
+ ]
+}

@@ -1,0 +1,51 @@
+青跃（黑斑侧褶蛙）三维角色 · v8 · 2026-10-29（改动见 CHANGELOG.md）
+  ★ v8 新入口：qingyue-pond.html —— 夜晚池塘 + 动作控制（1 普通跳 / 2 远跳 / 3 游泳，按键见 CHANGELOG）。原 qingyue-3d.html 保留。
+================================================
+参考原画：art-corner4/portrait-qingyue.jpg（小天狼星 凤凰岛 IP）
+
+一、文件
+  qingyue-3d.html        交互页面（three.js r170，已本地内置于 vendor/three，离线可用）
+  qingyue.glb            网页用模型（含骨骼、10 个动作、表情形变、贴图）
+  fbx/qingyue.fbx        3ds Max / Maya 用；贴图在 fbx/qingyue.fbm/
+  qingyue.blend          Blender 源文件（动作保存在 NLA / Action 中）
+  textures/              程序化生成贴图：底色、粗糙度、法线、眼睛
+  screenshots/           截图（compare_ref_vs_3d.png 为原画与三维对比）
+  src/                   全部建模/绑定/动画/导出脚本（可重新生成）
+
+二、打开网页
+  浏览器不能直接双击打开（会被跨域拦截），需在本文件夹起一个本地服务：
+    python3 -m http.server 8000
+  然后访问 http://localhost:8000/qingyue-3d.html
+  页签：动作 / 骨骼 / 表情 / 说话。鼠标拖动旋转、滚轮缩放；眼睛会跟随鼠标；
+  点击头/皇冠/眼睛/肚子/手脚会触发不同动作。手机端可用（底部面板）。
+  说话：输入中文或点预设台词，用浏览器中文语音(zh-CN)朗读并同步口型；
+  也可开启麦克风，按音量驱动口型。
+
+三、骨骼（43 根）
+  root, hips, spine, chest, neck, head, jaw(下颌), throat(喉囊), crown(皇冠),
+  eye.L/R, lid.L/R(眼睑), upper_arm/forearm/hand.L/R, finger1-4.L/R,
+  thigh/shin/foot.L/R, toe1-5.L/R
+  （three.js 会去掉名字里的点，如 eye.L → eyeL）
+
+四、动作（10 个）
+  idle 待机、sit_hug 抱膝坐（默认姿势，同原画）、jump 跳跃、hop_forward 向前蹦、
+  wave 挥手、talk 说话、croak 鸣叫鼓喉、happy_spin 开心转圈、
+  look_around 东张西望、sleep 打瞌睡
+
+五、表情形变（Shape Keys / Morph）
+  身体：smile 微笑（网页默认 0.6）、mouth_open 张嘴、viseme_A/O/E/U 口型、throat_puff 鼓喉囊
+  眼睑：blink_L、blink_R
+
+六、导入 3ds Max
+  1. 文件 → 导入 → qingyue.fbx；单位按“米”，模型高约 1m（=100cm），可在导入框缩放。
+  2. 勾选 动画、蒙皮、变形(Morph)；10 个动作作为 Take 导入（导入对话框“动画→Take”选择）。
+  3. 贴图自动从 qingyue.fbm 读取；若丢失，把材质贴图路径指向该文件夹。
+  4. 形变在 Morpher 修改器中。眼睛、眼睑、皇冠是独立网格，各自绑定到对应骨骼。
+
+七、与原画的差异（如实说明）
+  - 程序化建模，整体造型/配色/斑点/抱膝坐姿/小皇冠已贴近原画，但脸部细节、
+    皮肤质感与原画的手绘光影仍有差距；肤色在网页灯光下偏淡。
+  - 嘴为“画出的微笑线”，张嘴是拉伸嘴线区域实现，大幅张嘴（鸣叫）时嘴缝边缘有锯齿感。
+  - 鼓喉囊时下巴下方会出现一块偏米色的形变。
+  - 跳跃时腿部拉伸偏“橡皮感”。闭眼时眼睑是整块绿色壳，比原画显得突出。
+  - 预设台词由原画页面里的角色介绍改写，原资料中没有现成台词。

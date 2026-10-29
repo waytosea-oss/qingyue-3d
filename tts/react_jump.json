@@ -1,0 +1,69 @@
+{
+ "id": "react_jump",
+ "group": "动作反应",
+ "text": "嘿呀！看我跳得多高！",
+ "file": "react_jump.mp3",
+ "voice": "zh-CN-XiaoyiNeural",
+ "rate": "+6%",
+ "pitch": "+6Hz",
+ "key": "ae7951bc",
+ "duration": 2.98,
+ "words": [
+  {
+   "type": "WordBoundary",
+   "t": 0.097,
+   "d": 0.436,
+   "text": "嘿呀"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.061,
+   "d": 0.2,
+   "text": "看"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.262,
+   "d": 0.106,
+   "text": "我"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.38,
+   "d": 0.2,
+   "text": "跳"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.58,
+   "d": 0.083,
+   "text": "得"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.675,
+   "d": 0.165,
+   "text": "多"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.84,
+   "d": 0.224,
+   "text": "高"
+  }
+ ],
+ "sentences": [
+  {
+   "type": "SentenceBoundary",
+   "t": 0.1,
+   "d": 0.964,
+   "text": "嘿呀！"
+  },
+  {
+   "type": "SentenceBoundary",
+   "t": 1.014,
+   "d": 1.816,
+   "text": "看我跳得多高！"
+  }
+ ]
+}

@@ -1,0 +1,69 @@
+{
+ "id": "react_talk",
+ "group": "动作反应",
+ "text": "想听我讲湿地的故事吗？",
+ "file": "react_talk.mp3",
+ "voice": "zh-CN-XiaoyiNeural",
+ "rate": "+6%",
+ "pitch": "+6Hz",
+ "key": "bd7be6ed",
+ "duration": 2.688,
+ "words": [
+  {
+   "type": "WordBoundary",
+   "t": 0.097,
+   "d": 0.295,
+   "text": "想"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.392,
+   "d": 0.141,
+   "text": "听"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.545,
+   "d": 0.094,
+   "text": "我"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.64,
+   "d": 0.165,
+   "text": "讲"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.817,
+   "d": 0.295,
+   "text": "湿地"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.111,
+   "d": 0.094,
+   "text": "的"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.217,
+   "d": 0.295,
+   "text": "故事"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.512,
+   "d": 0.212,
+   "text": "吗"
+  }
+ ],
+ "sentences": [
+  {
+   "type": "SentenceBoundary",
+   "t": 0.1,
+   "d": 2.438,
+   "text": "想听我讲湿地的故事吗？"
+  }
+ ]
+}

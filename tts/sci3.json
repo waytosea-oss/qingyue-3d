@@ -1,0 +1,75 @@
+{
+ "id": "sci3",
+ "group": "科普",
+ "text": "跟我一起，做一次水质小侦探吧！",
+ "file": "sci3.mp3",
+ "voice": "zh-CN-XiaoyiNeural",
+ "rate": "+6%",
+ "pitch": "+6Hz",
+ "key": "83b20063",
+ "duration": 3.443,
+ "words": [
+  {
+   "type": "WordBoundary",
+   "t": 0.097,
+   "d": 0.13,
+   "text": "跟"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.227,
+   "d": 0.083,
+   "text": "我"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.321,
+   "d": 0.46,
+   "text": "一起"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.982,
+   "d": 0.165,
+   "text": "做"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.147,
+   "d": 0.224,
+   "text": "一次"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.383,
+   "d": 0.307,
+   "text": "水质"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.701,
+   "d": 0.342,
+   "text": "小侦"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.055,
+   "d": 0.236,
+   "text": "探"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.291,
+   "d": 0.189,
+   "text": "吧"
+  }
+ ],
+ "sentences": [
+  {
+   "type": "SentenceBoundary",
+   "t": 0.1,
+   "d": 3.193,
+   "text": "跟我一起，做一次水质小侦探吧！"
+  }
+ ]
+}

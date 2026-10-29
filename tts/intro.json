@@ -1,0 +1,99 @@
+{
+ "id": "intro",
+ "group": "开场",
+ "text": "你好呀，我是青跃，一只黑斑侧褶蛙，住在浅滩蛙鸣湾。",
+ "file": "intro.mp3",
+ "voice": "zh-CN-XiaoyiNeural",
+ "rate": "+6%",
+ "pitch": "+6Hz",
+ "key": "b7e617fb",
+ "duration": 5.495,
+ "words": [
+  {
+   "type": "WordBoundary",
+   "t": 0.097,
+   "d": 0.342,
+   "text": "你好"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.439,
+   "d": 0.224,
+   "text": "呀"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.875,
+   "d": 0.118,
+   "text": "我"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.993,
+   "d": 0.106,
+   "text": "是"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.111,
+   "d": 0.483,
+   "text": "青跃"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.819,
+   "d": 0.153,
+   "text": "一"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.972,
+   "d": 0.118,
+   "text": "只"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.102,
+   "d": 0.33,
+   "text": "黑斑"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.432,
+   "d": 0.165,
+   "text": "侧"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.597,
+   "d": 0.377,
+   "text": "褶蛙"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 3.234,
+   "d": 0.354,
+   "text": "住在"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 3.6,
+   "d": 0.389,
+   "text": "浅滩"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 4.0,
+   "d": 0.531,
+   "text": "蛙鸣湾"
+  }
+ ],
+ "sentences": [
+  {
+   "type": "SentenceBoundary",
+   "t": 0.1,
+   "d": 5.245,
+   "text": "你好呀，我是青跃，一只黑斑侧褶蛙，住在浅滩蛙鸣湾。"
+  }
+ ]
+}

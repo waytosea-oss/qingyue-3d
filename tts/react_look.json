@@ -1,0 +1,57 @@
+{
+ "id": "react_look",
+ "group": "动作反应",
+ "text": "咦？那边有什么呀？",
+ "file": "react_look.mp3",
+ "voice": "zh-CN-XiaoyiNeural",
+ "rate": "+6%",
+ "pitch": "+6Hz",
+ "key": "a711b843",
+ "duration": 2.839,
+ "words": [
+  {
+   "type": "WordBoundary",
+   "t": 0.097,
+   "d": 0.342,
+   "text": "咦"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.967,
+   "d": 0.401,
+   "text": "那边"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.38,
+   "d": 0.118,
+   "text": "有"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.509,
+   "d": 0.224,
+   "text": "什么"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.734,
+   "d": 0.189,
+   "text": "呀"
+  }
+ ],
+ "sentences": [
+  {
+   "type": "SentenceBoundary",
+   "t": 0.1,
+   "d": 0.87,
+   "text": "咦？"
+  },
+  {
+   "type": "SentenceBoundary",
+   "t": 0.92,
+   "d": 1.769,
+   "text": "那边有什么呀？"
+  }
+ ]
+}

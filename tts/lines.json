@@ -1,0 +1,27 @@
+{
+  "voice": "zh-CN-XiaoyiNeural",
+  "rate": "+6%",
+  "pitch": "+6Hz",
+  "note": "活泼可爱的儿童向音色；改台词后运行 python3 src/gen_tts.py 重新生成 MP3 + 时间轴",
+  "lines": [
+    {"id": "intro",      "group": "开场",   "text": "你好呀，我是青跃，一只黑斑侧褶蛙，住在浅滩蛙鸣湾。"},
+    {"id": "greet1",     "group": "问候",   "text": "嗨，小朋友，欢迎来到凤凰岛！"},
+    {"id": "greet2",     "group": "问候",   "text": "呱呱，今天也要做个爱护湿地的小侦探哦！"},
+    {"id": "sci1",       "group": "科普",   "text": "我是湿地的体温计，水一生病，我最先知道。"},
+    {"id": "sci2",       "group": "科普",   "text": "两栖动物皮肤很敏感，所以我们是水质健康的指示物种哦！"},
+    {"id": "sci3",       "group": "科普",   "text": "跟我一起，做一次水质小侦探吧！"},
+    {"id": "sci4",       "group": "科普",   "text": "夜晚的蛙鸣，就是我们在唱歌——呱呱呱！"},
+    {"id": "sci5",       "group": "科普",   "text": "我爱吃昆虫，春夏在稻田池塘产卵，冬天就钻进泥里冬眠。"},
+    {"id": "sci6",       "group": "科普",   "text": "我的背上有两条侧褶，就像两道小小的山脊。"},
+    {"id": "react_croak","group": "动作反应","text": "呱——呱——！听，这是我的歌声！"},
+    {"id": "react_wave", "group": "动作反应","text": "嗨！你好呀！"},
+    {"id": "react_jump", "group": "动作反应","text": "嘿呀！看我跳得多高！"},
+    {"id": "react_hop",  "group": "动作反应","text": "向前蹦一蹦！"},
+    {"id": "react_spin", "group": "动作反应","text": "转个圈圈，真开心！"},
+    {"id": "react_sleep","group": "动作反应","text": "呼……我先眯一会儿。"},
+    {"id": "react_look", "group": "动作反应","text": "咦？那边有什么呀？"},
+    {"id": "react_talk", "group": "动作反应","text": "想听我讲湿地的故事吗？"},
+    {"id": "vest_on",    "group": "背心",   "text": "穿上科考背心，出发去考察！"},
+    {"id": "vest_off",   "group": "背心",   "text": "先把背心脱下来，歇一歇。"}
+  ]
+}

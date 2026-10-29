@@ -1,0 +1,51 @@
+{
+ "id": "react_sleep",
+ "group": "动作反应",
+ "text": "呼……我先眯一会儿。",
+ "file": "react_sleep.mp3",
+ "voice": "zh-CN-XiaoyiNeural",
+ "rate": "+6%",
+ "pitch": "+6Hz",
+ "key": "c6a1ba3c",
+ "duration": 2.629,
+ "words": [
+  {
+   "type": "WordBoundary",
+   "t": 0.097,
+   "d": 0.413,
+   "text": "呼"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.781,
+   "d": 0.118,
+   "text": "我"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.911,
+   "d": 0.259,
+   "text": "先"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.17,
+   "d": 0.094,
+   "text": "眯"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.276,
+   "d": 0.389,
+   "text": "一会儿"
+  }
+ ],
+ "sentences": [
+  {
+   "type": "SentenceBoundary",
+   "t": 0.1,
+   "d": 2.379,
+   "text": "呼……我先眯一会儿。"
+  }
+ ]
+}

@@ -1,0 +1,117 @@
+{
+ "id": "sci6",
+ "group": "科普",
+ "text": "我的背上有两条侧褶，就像两道小小的山脊。",
+ "file": "sci6.mp3",
+ "voice": "zh-CN-XiaoyiNeural",
+ "rate": "+6%",
+ "pitch": "+6Hz",
+ "key": "eac67b62",
+ "duration": 4.528,
+ "words": [
+  {
+   "type": "WordBoundary",
+   "t": 0.097,
+   "d": 0.141,
+   "text": "我"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.239,
+   "d": 0.106,
+   "text": "的"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.357,
+   "d": 0.189,
+   "text": "背"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.545,
+   "d": 0.248,
+   "text": "上"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.887,
+   "d": 0.118,
+   "text": "有"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.017,
+   "d": 0.165,
+   "text": "两"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.182,
+   "d": 0.153,
+   "text": "条"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.347,
+   "d": 0.224,
+   "text": "侧"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.571,
+   "d": 0.236,
+   "text": "褶"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.067,
+   "d": 0.153,
+   "text": "就"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.22,
+   "d": 0.141,
+   "text": "像"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.373,
+   "d": 0.165,
+   "text": "两"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.538,
+   "d": 0.118,
+   "text": "道"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.668,
+   "d": 0.33,
+   "text": "小小"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.998,
+   "d": 0.083,
+   "text": "的"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 3.092,
+   "d": 0.472,
+   "text": "山脊"
+  }
+ ],
+ "sentences": [
+  {
+   "type": "SentenceBoundary",
+   "t": 0.1,
+   "d": 4.278,
+   "text": "我的背上有两条侧褶，就像两道小小的山脊。"
+  }
+ ]
+}

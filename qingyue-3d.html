@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<title>青跃 · 黑斑侧褶蛙 · 三维互动角色｜凤凰岛</title>
+<style>
+:root{--g:#7fae3a;--gd:#3f5f1d;--cream:#f4f1d6;--ink:#22301a;--gold:#c9a24a;--panel:rgba(250,248,236,.86)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:#dfe6d2;font-family:"PingFang SC","Noto Sans SC","Microsoft YaHei",system-ui,sans-serif;color:var(--ink)}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+#load{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 40%,#fbf6df,#cfdcbc);z-index:20;transition:opacity .6s}
+#load b{font-size:20px;letter-spacing:.2em;color:var(--gd)} #load i{display:block;margin-top:12px;width:180px;height:4px;border-radius:2px;background:#0001;overflow:hidden}
+#load i s{display:block;height:100%;width:0;background:var(--g);transition:width .2s}
+#card{position:fixed;left:16px;top:14px;max-width:340px;background:var(--panel);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:16px;padding:12px 16px;box-shadow:0 6px 24px #0002;z-index:5}
+#card h1{margin:0;font-size:22px;letter-spacing:.12em}#card h1 small{font-size:12px;letter-spacing:.05em;color:#6a7a50;margin-left:8px;font-weight:500}
+#card p{margin:6px 0 0;font-size:13px;line-height:1.6}#card .tags{margin-top:6px;display:flex;flex-wrap:wrap;gap:5px}
+#card .tags span{font-size:11px;padding:2px 8px;border-radius:10px;background:#7fae3a22;color:var(--gd)}
+#card .more{display:block}#card.min .more{display:none}
+#cardT{position:absolute;right:10px;top:8px;border:0;background:none;font-size:13px;color:#6a7a50;cursor:pointer}
+#panel{position:fixed;right:14px;top:14px;bottom:14px;width:340px;background:var(--panel);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-radius:18px;box-shadow:0 8px 30px #0003;display:flex;flex-direction:column;z-index:6;overflow:hidden}
+#tabs{display:flex;border-bottom:1px solid #0001}
+#tabs button{flex:1;border:0;background:none;padding:12px 0;font-size:15px;color:#6a7a50;cursor:pointer;font-family:inherit}
+#tabs button.on{color:var(--gd);font-weight:700;box-shadow:inset 0 -3px 0 var(--g)}
+.page{display:none;padding:12px 14px;overflow:auto;flex:1}.page.on{display:block}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.btn{border:0;border-radius:12px;padding:11px 8px;font-size:15px;font-family:inherit;background:#fff;color:var(--ink);box-shadow:0 2px 6px #0001;cursor:pointer;transition:.15s}
+.btn:hover{transform:translateY(-1px)}.btn.on{background:var(--g);color:#fff}
+.btn.pri{background:var(--g);color:#fff}.btn.sm{padding:7px 10px;font-size:13px}
+h3{font-size:13px;margin:14px 0 6px;color:#6a7a50;font-weight:600;letter-spacing:.05em}
+.sl{display:grid;grid-template-columns:92px 1fr 40px;align-items:center;gap:6px;font-size:13px;margin:5px 0}
+.sl input{width:100%;accent-color:var(--g)}.sl output{font-size:11px;color:#778;text-align:right}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0}
+textarea{width:100%;min-height:70px;border-radius:12px;border:1px solid #0002;padding:10px;font-size:15px;font-family:inherit;resize:vertical;background:#fff}
+.chip{border:1px solid #7fae3a66;background:#fff;border-radius:14px;padding:6px 10px;font-size:13px;cursor:pointer;text-align:left;font-family:inherit;color:var(--ink)}
+.tog{display:flex;align-items:center;gap:6px;font-size:13px}
+#toast{position:fixed;left:50%;top:18px;transform:translateX(-50%);background:#22301ae0;color:#fff;padding:8px 16px;border-radius:20px;font-size:14px;opacity:0;transition:.3s;z-index:30;pointer-events:none}
+#hint{position:fixed;left:16px;bottom:14px;font-size:12px;color:#33402acc;background:#ffffff8c;padding:6px 10px;border-radius:10px;z-index:4}
+#sel{font-size:12px;color:var(--gd);margin-top:6px}
+#sheetT{display:none}
+@media (max-width:760px){
+ #card{left:10px;top:10px;right:10px;max-width:none;padding:10px 12px}#card h1{font-size:18px}
+ #panel{left:0;right:0;bottom:0;top:auto;width:auto;height:46vh;border-radius:18px 18px 0 0;transition:height .3s}
+ #panel.min{height:96px}
+ #sheetT{display:block;margin:6px auto 0;width:44px;height:5px;border-radius:3px;background:#0002;border:0;flex:none}
+ #hint{display:none}.grid{grid-template-columns:repeat(3,1fr)}.btn{font-size:14px;padding:10px 4px}
+}
+</style>
+<script type="importmap">
+{"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/":"./vendor/three/addons/"}}
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="load"><b>青跃正在醒来…</b><i><s id="bar"></s></i></div>
+<div id="card"><button id="cardT">收起</button>
+ <h1>青跃<small>黑斑侧褶蛙 · 两栖类居民</small></h1>
+ <div class="more">
+ <p>湿地的体温计，水一生病，它最先知道。</p>
+ <p style="color:#5d6b48">两栖动物皮肤敏感，是水质健康的指示物种。<br>家园：浅滩蛙鸣湾 —— 做一次水质小侦探，听懂夜晚的蛙鸣。</p>
+ <div class="tags"><span>捕食昆虫</span><span>稻田池塘</span><span>春夏产卵</span><span>冬季冬眠</span></div>
+ </div>
+</div>
+<div id="panel">
+ <button id="sheetT" aria-label="展开/收起"></button>
+ <div id="tabs"><button data-p="pAct" class="on">动作</button><button data-p="pBone">骨骼</button><button data-p="pFace">表情</button><button data-p="pTalk">说话</button></div>
+ <div class="page on" id="pAct">
+  <div class="grid" id="actBtns"></div>
+  <h3>播放设置</h3>
+  <div class="sl"><span>动作速度</span><input id="speed" type="range" min="0.3" max="2" step="0.05" value="1"><output>1.0</output></div>
+  <div class="row"><label class="tog"><input type="checkbox" id="eyeFollow" checked>眼睛跟随指针</label><label class="tog"><input type="checkbox" id="autoBlink" checked>自动眨眼</label></div>
+  <div class="row"><label class="tog"><input type="checkbox" id="sound" checked>蛙鸣音效</label><label class="tog"><input type="checkbox" id="autoRot">自动环绕</label></div>
+  <div class="row"><label class="tog"><input type="checkbox" id="vestOn" checked>穿科考背心</label></div>
+  <div class="row"><button class="btn sm" id="resetView">重置视角</button><button class="btn sm" id="shot">截图保存</button></div>
+  <p style="font-size:12px;color:#6a7a50;line-height:1.6">提示：点击青跃的头会「鸣叫」，点身体会「跳跃」，点手臂会「挥手」。拖动旋转视角，双指/滚轮缩放。</p>
+ </div>
+ <div class="page" id="pBone">
+  <div id="boneSl"></div>
+  <div id="sel">在模型上点击部位可高亮对应骨骼</div>
+  <div class="row"><button class="btn sm" id="boneReset">骨骼归零</button><label class="tog"><input type="checkbox" id="freeze">暂停动画（纯手动摆姿势）</label></div>
+ </div>
+ <div class="page" id="pFace">
+  <div id="morphSl"></div>
+  <div class="row"><button class="btn sm" id="morphReset">表情归零</button></div>
+ </div>
+ <div class="page" id="pTalk">
+  <textarea id="say">你好呀，我是青跃，一只黑斑侧褶蛙，住在浅滩蛙鸣湾。</textarea>
+  <div class="row"><button class="btn pri" id="sayBtn">让它说</button><button class="btn sm" id="stopBtn">停止</button><button class="btn sm" id="micBtn">🎤 麦克风对口型</button></div>
+  <div class="sl"><span>音调</span><input id="pitch" type="range" min="0.5" max="2" step="0.05" value="1.35"><output>1.35</output></div>
+  <div class="sl"><span>语速</span><input id="rate" type="range" min="0.5" max="1.6" step="0.05" value="1"><output>1.0</output></div>
+  <h3>青跃的台词</h3>
+  <div id="lines" style="display:flex;flex-direction:column;gap:6px"></div>
+  <p style="font-size:12px;color:#6a7a50;line-height:1.6">说明：使用浏览器自带语音合成（中文）。口型根据文字逐字驱动；如浏览器提供逐字边界事件则自动对齐。麦克风对口型需在 https 或 localhost 下使用。</p>
+ </div>
+</div>
+<div id="toast"></div>
+<div id="hint">青跃 3D · 凤凰岛科普 IP · 拖动旋转 / 滚轮缩放 / 点击互动</div>
+<script type="module">
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
+const $=s=>document.querySelector(s);
+const toast=(t,ms=2200)=>{const e=$('#toast');e.textContent=t;e.style.opacity=1;clearTimeout(e._t);e._t=setTimeout(()=>e.style.opacity=0,ms)};
+// ---------- renderer / scene
+const canvas=$('#c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,preserveDrawingBuffer:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.toneMapping=THREE.NeutralToneMapping;renderer.toneMappingExposure=1.22;
+renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+const scene=new THREE.Scene();
+const FOG=new THREE.Color('#ebe2bd');scene.fog=new THREE.FogExp2(FOG,0.08);
+const camera=new THREE.PerspectiveCamera(32,1,0.05,200);
+const controls=new OrbitControls(camera,canvas);controls.enableDamping=true;controls.minDistance=1.4;controls.maxDistance=9;controls.maxPolarAngle=Math.PI*0.53;
+const HOME={pos:new THREE.Vector3(1.4,0.95,3.0),tgt:new THREE.Vector3(0,0.48,0)};
+function resetView(){camera.position.copy(HOME.pos);controls.target.copy(HOME.tgt);controls.update()}
+resetView();
+const pmrem=new THREE.PMREMGenerator(renderer);scene.environment=pmrem.fromScene(new RoomEnvironment(),0.04).texture;scene.environmentIntensity=0.35;
+// sky dome gradient (misty dawn)
+{const g=new THREE.SphereGeometry(80,32,16);const m=new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:false,uniforms:{},
+ vertexShader:'varying vec3 vp;void main(){vp=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+ fragmentShader:`varying vec3 vp;void main(){float h=vp.y;vec3 top=vec3(.96,.91,.72),mid=vec3(.90,.88,.72),low=vec3(.64,.70,.54);
+ vec3 sun=normalize(vec3(-.55,.35,-.75));float s=pow(max(dot(vp,sun),0.),6.)*.55+pow(max(dot(vp,sun),0.),60.)*.6;
+ vec3 c=mix(low,mid,smoothstep(-.15,.08,h));c=mix(c,top,smoothstep(.08,.6,h));c+=vec3(1.,.84,.5)*s*1.3;gl_FragColor=vec4(c,1.);}`});
+ scene.add(new THREE.Mesh(g,m));}
+// lights
+scene.add(new THREE.HemisphereLight(0xfff0c6,0x6d7838,0.8));
+const key=new THREE.DirectionalLight(0xfff0cc,1.6);key.position.set(-2.5,4,3.5);key.castShadow=true;key.shadow.mapSize.set(2048,2048);
+Object.assign(key.shadow.camera,{left:-2,right:2,top:2,bottom:-2,near:0.5,far:15});key.shadow.bias=-0.0004;key.shadow.normalBias=0.02;scene.add(key);
+const back=new THREE.DirectionalLight(0xffc676,3.2);   // 暖金逆光（原画左后上方的晨光）back.position.set(-3.5,3.4,-4);scene.add(back);
+const rim=new THREE.DirectionalLight(0xfff0d0,1.0);rim.position.set(3,1.5,-3);scene.add(rim);
+// ---------- water
+function noiseTex(size,fn){const c=document.createElement('canvas');c.width=c.height=size;const x=c.getContext('2d');fn(x,size);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;return t}
+const waterN=noiseTex(256,(x,s)=>{const d=x.createImageData(s,s);for(let j=0;j<s;j++)for(let i=0;i<s;i++){const a=i/s*Math.PI*2,b=j/s*Math.PI*2;
+ const nx=Math.sin(a*3+Math.sin(b*2)*1.5)*.5+Math.sin(a*7+b*5)*.25,ny=Math.cos(b*4+Math.sin(a*3))*.5+Math.cos(b*9-a*4)*.2;const k=(j*s+i)*4;
+ d.data[k]=128+nx*60;d.data[k+1]=128+ny*60;d.data[k+2]=255;d.data[k+3]=255}x.putImageData(d,0,0)});
+waterN.repeat.set(10,10);
+const water=new THREE.Mesh(new THREE.CircleGeometry(60,64),new THREE.MeshPhysicalMaterial({color:0x56684a,roughness:0.12,metalness:0,normalMap:waterN,normalScale:new THREE.Vector2(0.25,0.25),envMapIntensity:1.2,clearcoat:1,clearcoatRoughness:0.08}));
+water.rotation.x=-Math.PI/2;water.position.y=-0.03;water.receiveShadow=true;scene.add(water);
+// ---------- lily pad
+const padTex=noiseTex(1024,(x,s)=>{const c=s/2;const g=x.createRadialGradient(c,c,10,c,c,c);g.addColorStop(0,'#5f8e36');g.addColorStop(.7,'#47772a');g.addColorStop(1,'#3a6522');
+ x.fillStyle=g;x.fillRect(0,0,s,s);x.strokeStyle='rgba(190,220,140,.28)';
+ for(let i=0;i<34;i++){const a=i/34*Math.PI*2;x.lineWidth=i%2?2:4;x.beginPath();x.moveTo(c,c);let px=c,py=c;for(let r=0;r<c;r+=20){const w=Math.sin(r*.05+i)*0.03;px=c+Math.cos(a+w)*r;py=c+Math.sin(a+w)*r;x.lineTo(px,py)}x.stroke()}
+ for(let i=0;i<4000;i++){x.fillStyle=`rgba(${Math.random()<.5?'40,70,20':'200,230,150'},${Math.random()*.08})`;x.beginPath();x.arc(Math.random()*s,Math.random()*s,Math.random()*6,0,7);x.fill()}});
+padTex.colorSpace=THREE.SRGBColorSpace;
+function makePad(R,notch=0.18){const g=new THREE.CircleGeometry(R,128,notch,Math.PI*2-notch*2);const p=g.attributes.position;
+ for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i);const r=Math.hypot(x,y)/R;const a=Math.atan2(y,x);p.setZ(i,Math.pow(r,5)*0.09*(0.6+0.4*Math.sin(a*7))+Math.pow(r,2)*0.02)}
+ g.computeVertexNormals();const m=new THREE.Mesh(g,new THREE.MeshPhysicalMaterial({map:padTex,roughness:0.55,clearcoat:0.3,clearcoatRoughness:0.35,envMapIntensity:0.6,side:THREE.DoubleSide,sheen:0.15,sheenColor:new THREE.Color(0xc8e890)}));
+ m.rotation.x=-Math.PI/2;m.receiveShadow=true;m.castShadow=true;return m}
+const pad=makePad(1.55);pad.rotation.z=-1.2;scene.add(pad);
+[[3.2,-1.4,0.9,0.5],[-3.4,-2.2,0.8,2],[-2.6,2.4,1.1,4],[4.2,2.6,1.2,1]].forEach(([x,z,r,rot])=>{const p=makePad(r);p.position.set(x,-0.02,z);p.rotation.z=rot;scene.add(p)});
+// dew drops
+const dewMat=new THREE.MeshPhysicalMaterial({color:0xffffff,roughness:0.02,transmission:1,thickness:0.04,ior:1.33,envMapIntensity:1.5,clearcoat:1});
+for(let i=0;i<46;i++){const r=0.012+Math.random()*0.03;const d=new THREE.Mesh(new THREE.SphereGeometry(r,20,12),dewMat);const a=Math.random()*6.28,rr=0.55+Math.random()*0.9;
+ d.scale.y=0.7;d.position.set(Math.cos(a)*rr,0.02+r*0.6+Math.pow(rr/1.55,2)*0.02,Math.sin(a)*rr);scene.add(d)}
+// reeds
+const reedMat=new THREE.MeshStandardMaterial({color:0x7c8f55,roughness:0.8});
+for(let i=0;i<70;i++){const h=1.5+Math.random()*2.5;const g=new THREE.ConeGeometry(0.02+Math.random()*0.02,h,5);const m=new THREE.Mesh(g,reedMat);const a=-2.2+Math.random()*2.5,r=5+Math.random()*6;
+ m.position.set(Math.cos(a)*r,h/2-0.05,-Math.abs(Math.sin(a)*r)-2);m.rotation.z=(Math.random()-.5)*0.25;m.rotation.x=(Math.random()-.5)*0.2;scene.add(m)}
+// mist motes
+const motes=new THREE.Points(new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(Array.from({length:600},()=>[(Math.random()-.5)*8,Math.random()*2.5,(Math.random()-.5)*8]).flat(),3)),
+ new THREE.PointsMaterial({color:0xfff4d0,size:0.025,transparent:true,opacity:0.7,depthWrite:false}));scene.add(motes);
+// v5 暖色轮廓光（菲涅尔边缘光）：模拟原画的晨光逆光描边
+const RIM={color:new THREE.Color(0xffd890),uniforms:[]};
+function addRim(mat,k){mat.onBeforeCompile=sh=>{sh.uniforms.uRim={value:RIM.color.clone().multiplyScalar(k)};RIM.uniforms.push(sh.uniforms.uRim);
+  sh.fragmentShader='uniform vec3 uRim;\n'+sh.fragmentShader.replace('#include <emissivemap_fragment>',
+  '#include <emissivemap_fragment>\n{vec3 vd=normalize(vViewPosition);float fr=pow(1.0-clamp(dot(normal,vd),0.0,1.0),3.0);float up=0.55+0.45*clamp(normal.y*0.5+0.5,0.0,1.0);totalEmissiveRadiance+=uRim*fr*up;}')};mat.needsUpdate=true}
+// v5 低空水雾 + 左后上方的柔和光束
+{const fogTex=noiseTex(256,(x,s)=>{const g=x.createLinearGradient(0,0,0,s);g.addColorStop(0,'rgba(255,248,225,0)');g.addColorStop(.55,'rgba(255,246,220,.55)');g.addColorStop(1,'rgba(255,246,220,0)');x.fillStyle=g;x.fillRect(0,0,s,s);
+  const h=x.createLinearGradient(0,0,s,0);h.addColorStop(0,'rgba(0,0,0,1)');h.addColorStop(.15,'rgba(0,0,0,0)');h.addColorStop(.85,'rgba(0,0,0,0)');h.addColorStop(1,'rgba(0,0,0,1)');x.globalCompositeOperation='destination-out';x.fillStyle=h;x.fillRect(0,0,s,s)});
+ for(let i=0;i<7;i++){const m=new THREE.Mesh(new THREE.PlaneGeometry(9,0.9),new THREE.MeshBasicMaterial({map:fogTex,transparent:true,opacity:0.32,depthWrite:false,fog:false}));
+  m.position.set((Math.random()-.5)*4,0.12+Math.random()*0.25,-2.2-i*0.9);scene.add(m)}
+ const rayTex=noiseTex(128,(x,s)=>{const g=x.createLinearGradient(0,0,0,s);g.addColorStop(0,'rgba(255,236,190,.9)');g.addColorStop(1,'rgba(255,236,190,0)');x.fillStyle=g;x.fillRect(0,0,s,s);
+  const h=x.createLinearGradient(0,0,s,0);h.addColorStop(0,'rgba(0,0,0,1)');h.addColorStop(.5,'rgba(0,0,0,0)');h.addColorStop(1,'rgba(0,0,0,1)');x.globalCompositeOperation='destination-out';x.fillStyle=h;x.fillRect(0,0,s,s)});
+ for(let i=0;i<5;i++){const m=new THREE.Mesh(new THREE.PlaneGeometry(0.6+Math.random()*0.8,9),new THREE.MeshBasicMaterial({map:rayTex,transparent:true,opacity:0.07+Math.random()*0.05,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
+  m.position.set(-3.2+i*0.9,3.2,-4.5-Math.random());m.rotation.z=-0.55;scene.add(m)}}
+// soft drifting mist banks (misty, damp morning mood)
+const mistTex=noiseTex(256,(x,s)=>{const g=x.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2);g.addColorStop(0,'rgba(255,250,228,.85)');g.addColorStop(.5,'rgba(250,244,220,.35)');g.addColorStop(1,'rgba(250,244,220,0)');x.fillStyle=g;x.fillRect(0,0,s,s)});
+const mists=[];for(let i=0;i<22;i++){const m=new THREE.Sprite(new THREE.SpriteMaterial({map:mistTex,transparent:true,opacity:0.22+Math.random()*0.18,depthWrite:false,fog:false}));
+ m.position.set((Math.random()-.5)*14,0.25+Math.random()*0.9,-2.5-Math.random()*5); /* 雾团只在青跃身后，不挡近景 */ const sc=2.5+Math.random()*3;m.scale.set(sc*1.8,sc*0.55,1);m.userData.v=(Math.random()-.5)*0.08;scene.add(m);mists.push(m)}
+// ---------- frog
+const frog=new THREE.Group();frog.position.set(0,0.02,0.05);scene.add(frog);
+const vestMeshes=[];let model,mixer,bones={},restQ=new Map(),bodyMesh,lidL,lidR,morphMeshes=[],actions={},cur=null,baseLoop='idle';
+const ONE=new Set(['jump','hop_forward','wave','croak','happy_spin','look_around']);
+const ACTS=[['idle','待机'],['sit_hug','抱膝坐'],['jump','跳跃'],['hop_forward','向前蹦'],['wave','挥手'],['talk','说话'],['croak','鸣叫'],['happy_spin','开心转圈'],['look_around','东张西望'],['sleep','打瞌睡']];
+const loader=new GLTFLoader();
+loader.load('qingyue.glb',g=>{
+ model=g.scene;frog.add(model);
+ model.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false;
+   if(o.morphTargetDictionary){morphMeshes.push(o)} if(o.name.includes('Body'))bodyMesh=o;
+   const mn=o.material&&o.material.name;
+   if(mn==='Qingyue_Skin'||mn==='Qingyue_Lid'){addRim(o.material,mn==='Qingyue_Skin'?0.42:0.3)}
+   if(mn==='Qingyue_Skin'){o.material.envMapIntensity=1.0;if(o.material.normalScale)o.material.normalScale.set(0.5,0.5)}   // soft, slightly wet skin
+   if(mn==='Qingyue_Lid'){o.material.envMapIntensity=0.7}
+   if(mn==='Qingyue_Eye'){o.material.envMapIntensity=2.2}
+   if(mn&&mn.startsWith('Qingyue_Crown')){o.material.envMapIntensity=2.4}
+   if(mn==='Qingyue_Dew'){o.material.envMapIntensity=2.0;o.castShadow=false}
+   if(o.name.startsWith('Qingyue_Vest')){vestMeshes.push(o);if(mn&&mn.startsWith('Qingyue_Vest_')){o.material.envMapIntensity=mn.endsWith('Zip')||mn.endsWith('PenClip')?1.6:0.55}
+     if(mn==='Qingyue_Vest_Glass'){o.material.envMapIntensity=2.0;o.castShadow=false}}}
+  if(o.isBone){bones[o.name]=o}});
+ model.updateMatrixWorld(true);
+ for(const b of Object.values(bones)){restQ.set(b,b.getWorldQuaternion(new THREE.Quaternion()))}
+ restQ.set(model,new THREE.Quaternion());
+ for(const b of Object.values(bones)){bindQ.set(b,b.quaternion.clone());bindPS.set(b,[b.position.clone(),b.scale.clone()])}
+ initChinGuard();
+ mixer=new THREE.AnimationMixer(model);
+ for(const c of g.animations){const a=mixer.clipAction(c);actions[c.name]=a;if(ONE.has(c.name)){a.setLoop(THREE.LoopOnce);a.clampWhenFinished=true}}
+ mixer.addEventListener('finished',e=>{if(e.action!==cur)return;const n=e.action.getClip().name;if(n==='hop_forward'){rootMotion()}else play(baseLoop,0.35)});
+ play('idle',0);buildUI();
+ $('#load').style.opacity=0;setTimeout(()=>$('#load').remove(),700);
+ window.__ready=true;
+},e=>{if(e.total)$('#bar').style.width=(e.loaded/e.total*100)+'%'},err=>{$('#load b').textContent='模型加载失败：请通过网页服务器打开（见说明.txt）';console.error(err)});
+const B=n=>bones[n]||bones[n.replace('.','')];
+// ---------- 安全限位（v3）：骨骼角度与口型形变的上限
+const bindQ=new Map(),bindPS=new Map();
+const LIMIT={jawTotal:24,jawCroak:28,blink:112};   // v8: jaw opens up to ~22-24 deg (talking clearly visible)     // v4 抱膝时下巴就压在手臂上：平时下颌总开合（骨骼+口型形变当量）≤10°；鸣叫时手臂张开 ≤28°；眼皮闭合角 112°
+const LIDAX={'lid.L':[0.8273,0,-0.5618],'lid.R':[0.8273,0,0.5618]};   // 眼皮闭合轴（Blender→glTF 坐标）
+const MOUTH_EQ={mouth_open:10,viseme_A:8,viseme_O:6,viseme_E:5,viseme_U:3};   // 各口型形变内含的下颌角度
+function bindAngle(b){const q=bindQ.get(b).clone().invert().multiply(b.quaternion);return 2*Math.acos(Math.min(1,Math.abs(q.w)))*180/Math.PI}
+// three.js 的 PropertyMixer 只在"本帧结果≠上一帧结果"时才写骨骼；切换/停止动作或叠加偏移后会残留旧姿势（串动作）。
+// 每帧强制把 mixer 结果写回全部骨骼，保证骨骼姿势 = 当前动作。
+function forceApply(){const k=mixer._accuIndex;for(const pm of mixer._bindings){if(pm.useCount>0)pm.binding.setValue(pm.buffer,k*pm.valueSize+pm.valueSize)}}
+// v5 姿态级防穿插：下巴前缘/下缘两个点到前臂、手的距离太近时，按距离收紧下颌上限
+const CHIN_REST=[[0,0.555,0.36],[0,0.47,0.22]];    // glTF 坐标：下唇前缘、下巴底（Blender (0,-0.36,0.555)/(0,-0.22,0.47)）
+let chinLocal=[];const _cp=new THREE.Vector3(),_ap=new THREE.Vector3(),_bp=new THREE.Vector3();
+function initChinGuard(){const j=B('jaw');model.updateMatrixWorld(true);chinLocal=CHIN_REST.map(p=>j.worldToLocal(model.localToWorld(new THREE.Vector3(...p))))}
+function armChinDist(){const j=B('jaw');let d=9;
+ for(const n of ['L','R']){const segs=[[B('forearm.'+n),B('hand.'+n)],[B('upper_arm.'+n),B('forearm.'+n)]];
+  for(const [a,b] of segs){a.getWorldPosition(_ap);b.getWorldPosition(_bp);
+   for(const cl of chinLocal){j.localToWorld(_cp.copy(cl));const ab=_bp.clone().sub(_ap),t=THREE.MathUtils.clamp(_cp.clone().sub(_ap).dot(ab)/ab.lengthSq(),0,1);
+    d=Math.min(d,_cp.distanceTo(_ap.clone().addScaledVector(ab,t)))}}
+  const h=B('hand.'+n).getWorldPosition(_ap);for(const cl of chinLocal){j.localToWorld(_cp.copy(cl));d=Math.min(d,_cp.distanceTo(h))}}
+ return d/(frog.scale.x||1)}
+function guardJaw(maxDeg){const j=B('jaw');let lim=maxDeg;for(let k=0;k<4;k++){j.updateMatrixWorld(true);const d=armChinDist();
+  if(d>=0.11)break;const allowed=Math.max(0,bindAngle(j)-(0.11-d)*120);lim=Math.min(lim,allowed);clampBone(j,lim)}return lim}
+function clampBone(b,maxDeg){const a=bindAngle(b);if(a>maxDeg+1e-3){b.quaternion.copy(bindQ.get(b).clone().slerp(b.quaternion,maxDeg/a));b.updateMatrixWorld(true)}}
+function play(name,fade=0.3){const a=actions[name];if(!a)return;hold=null;if(!ONE.has(name))baseLoop=name;
+ // 只保留"当前动作 → 新动作"两者之间的淡入淡出，其余（包括上一次还在淡出的）立即停止，避免串动作
+ for(const o of Object.values(actions))if(o!==a&&o!==cur)o.stop();
+ if(cur===a&&fade>0){a.stop()}
+ a.reset();a.enabled=true;a.setEffectiveWeight(1);a.setEffectiveTimeScale(1);
+ if(fade<=0||!cur||cur===a){for(const o of Object.values(actions))if(o!==a)o.stop()}else{cur.enabled=true;a.crossFadeFrom(cur,fade,false)}
+ a.play();cur=a;
+ document.querySelectorAll('#actBtns .btn').forEach(b=>b.classList.toggle('on',b.dataset.a===name||(!ONE.has(name)?false:false)&&0));
+ document.querySelectorAll('#actBtns .btn').forEach(b=>b.classList.toggle('on',b.dataset.a===(ONE.has(name)?name:baseLoop)));
+ if(name==='croak')setTimeout(()=>ribbit(),550);if(name==='happy_spin')setTimeout(()=>ribbit(1.4),300);}
+function rootMotion(){const d=new THREE.Vector3(0,0,0.35).applyQuaternion(frog.quaternion);frog.position.add(d);
+ for(const o of Object.values(actions))o.stop();const a=actions[baseLoop];a.reset();a.setEffectiveWeight(1);a.play();cur=a;
+ if(Math.hypot(frog.position.x,frog.position.z)>0.75){turnTarget=Math.atan2(-frog.position.x,-frog.position.z)}}
+let turnTarget=null;
+function hop(){if(Math.hypot(frog.position.x,frog.position.z)>0.5){turnTarget=Math.atan2(-frog.position.x,-frog.position.z)}play('hop_forward',0.15)}
+// ---------- bone controls
+const BONE_SL=[
+ ['头部 左右转','head',[0,1,0],-60,60],['头部 点头','head',[1,0,0],-35,35],['头部 歪头','head',[0,0,1],-30,30],['下巴 张嘴','jaw',[1,0,0],0,24],
+ ['身体 前倾','spine',[1,0,0],-25,30],['身体 扭转','spine',[0,1,0],-35,35],
+ ['左臂 侧抬','upper_arm.L',[0,0,1],-20,110],['左臂 前举','upper_arm.L',[1,0,0],-100,30],['左前臂 弯曲','forearm.L',[0,1,0],-60,60],
+ ['右臂 侧抬','upper_arm.R',[0,0,-1],-20,110],['右臂 前举','upper_arm.R',[1,0,0],-100,30],['右前臂 弯曲','forearm.R',[0,-1,0],-60,60],
+ ['左腿 抬放','thigh.L',[1,0,0],-40,90],['右腿 抬放','thigh.R',[1,0,0],-40,90],['左脚掌','foot.L',[1,0,0],-40,40],['右脚掌','foot.R',[1,0,0],-40,40],
+ ['眼睛 左右看','eyes',[0,1,0],-30,30],['眼睛 上下看','eyes',[1,0,0],-25,25],['喉囊 鼓起(缩放)','throatS',null,1,2],['皇冠 倾斜','crown',[0,0,1],-25,25]];
+const boneVal={};
+const MORPHS=[['眨眼(双)','blink'],['左眼 眨眼','blink_L'],['右眼 眨眼','blink_R'],['微笑','smile'],['张嘴','mouth_open'],['口型 啊 A','viseme_A'],['口型 哦 O','viseme_O'],['口型 咿 E','viseme_E'],['口型 呜 U','viseme_U'],['鼓喉囊','throat_puff']];
+const morphVal={};const MORPH_DEF={smile:0.6};// 默认面部：温柔微笑（与原画一致）
+function slider(parent,label,min,max,step,val,on){const d=document.createElement('div');d.className='sl';d.innerHTML=`<span>${label}</span><input type=range min=${min} max=${max} step=${step} value=${val}><output>${val}</output>`;
+ const i=d.querySelector('input'),o=d.querySelector('output');i.oninput=()=>{o.textContent=(+i.value).toFixed(step<1?2:0);on(+i.value)};parent.appendChild(d);return i}
+function buildUI(){
+ const ab=$('#actBtns');ACTS.forEach(([k,t])=>{const b=document.createElement('button');b.className='btn';b.textContent=t;b.dataset.a=k;b.onclick=()=>{k==='hop_forward'?hop():play(k);react(k)};ab.appendChild(b)});
+ const bs=$('#boneSl');let grp='';BONE_SL.forEach((s,i)=>{const g=s[0].split(' ')[0];if(g!==grp){grp=g}
+  boneVal[i]=s[1]==='throatS'?1:0;const inp=slider(bs,s[0],s[3],s[4],s[1]==='throatS'?0.01:1,boneVal[i],v=>boneVal[i]=v);inp.dataset.bone=s[1];inp.dataset.def=boneVal[i]});
+ const ms=$('#morphSl');MORPHS.forEach(([t,k])=>{const d0=MORPH_DEF[k]||0;morphVal[k]=d0;const inp=slider(ms,t,0,1,0.01,d0,v=>morphVal[k]=v);inp.dataset.def=d0});
+ document.querySelectorAll('.btn').forEach(b=>{if(b.dataset.a===baseLoop)b.classList.add('on')});
+}
+$('#boneReset').onclick=()=>{document.querySelectorAll('#boneSl input').forEach((inp,i)=>{inp.value=inp.dataset.def;inp.dispatchEvent(new Event('input'))})};
+$('#morphReset').onclick=()=>{document.querySelectorAll('#morphSl input').forEach(inp=>{inp.value=inp.dataset.def||0;inp.dispatchEvent(new Event('input'))})};
+const _q=new THREE.Quaternion(),_q2=new THREE.Quaternion(),_v=new THREE.Vector3();
+function rotBone(b,axis,deg){if(!b||!deg)return;const p=b.parent;
+ const pc=p.getWorldQuaternion(new THREE.Quaternion()).multiply((restQ.get(p)||new THREE.Quaternion()).clone().invert());
+ _v.set(...axis).applyQuaternion(pc).applyQuaternion(b.getWorldQuaternion(_q2).invert()).normalize();
+ b.quaternion.multiply(_q.setFromAxisAngle(_v,deg*Math.PI/180));b.updateMatrixWorld(true)}
+// ---------- talk / lipsync
+const LINES=['你好呀，我是青跃，一只黑斑侧褶蛙，住在浅滩蛙鸣湾。','我是湿地的体温计，水一生病，我最先知道。','两栖动物皮肤很敏感，所以我们是水质健康的指示物种哦！','跟我一起，做一次水质小侦探吧！','夜晚的蛙鸣，就是我们在唱歌——呱呱呱！','我爱吃昆虫，春夏在稻田池塘产卵，冬天就钻进泥里冬眠。'];
+// ---------- v7 语音：Edge TTS 预生成 MP3 + 词边界时间轴（tts/），WebAudio 振幅驱动口型——只上下开合
+const TTS={man:null,byId:{},byText:{},timelines:{},buffers:{},ac:null,an:null,src:null,clip:null,buf:new Float32Array(1024),env:0,ready:false,failed:false,played:[]};
+fetch('tts/manifest.json').then(r=>{if(!r.ok)throw new Error('manifest '+r.status);return r.json()})
+ .then(m=>{TTS.man=m;for(const l of m.lines){TTS.byId[l.id]=l;TTS.byText[l.text]=l}TTS.ready=true;buildLines()})
+ .catch(e=>{TTS.failed=true;console.warn('TTS 清单不可用，改用浏览器语音合成',e);buildLines()});
+function buildLines(){const box=$('#lines');box.innerHTML='';
+ const list=TTS.man?TTS.man.lines.filter(l=>['开场','问候','科普'].includes(l.group)):LINES.map(t=>({text:t}));
+ list.forEach(l=>{const b=document.createElement('button');b.className='chip';b.textContent=l.text;b.onclick=()=>{$('#say').value=l.text;speak(l.text)};box.appendChild(b)})}
+function ttsCtx(){if(!TTS.ac){TTS.ac=new (window.AudioContext||window.webkitAudioContext)();TTS.an=TTS.ac.createAnalyser();TTS.an.fftSize=1024;TTS.an.connect(TTS.ac.destination)}
+ if(TTS.ac.state==='suspended')TTS.ac.resume();return TTS.ac}
+async function loadClip(l){if(TTS.buffers[l.id])return;const ac=ttsCtx();
+ const [ab,tl]=await Promise.all([fetch('tts/'+l.file).then(r=>{if(!r.ok)throw new Error('mp3 '+r.status);return r.arrayBuffer()}),fetch('tts/'+l.timeline).then(r=>r.ok?r.json():null).catch(()=>null)]);
+ TTS.buffers[l.id]=await ac.decodeAudioData(ab);TTS.timelines[l.id]=tl}
+async function playLine(l){stopSpeak();const ac=ttsCtx();await loadClip(l);
+ const s=ac.createBufferSource();s.buffer=TTS.buffers[l.id];s.connect(TTS.an);const t0=ac.currentTime+0.03;s.start(t0);TTS.src=s;
+ TTS.clip={id:l.id,t0,dur:s.buffer.duration,words:((TTS.timelines[l.id]||{}).words)||[]};TTS.played.push(l.id);
+ s.onended=()=>{if(TTS.src===s){TTS.src=null;TTS.clip=null}}}
+// 说一句：有预生成音频就播 MP3；只有音频加载/解码失败（或自定义文字没有录音）时才回退到浏览器语音合成
+function speak(text){text=(text||'').trim();if(!text)return;if(baseLoop==='sleep')play('idle');
+ const l=TTS.byText[text];
+ if(l&&!TTS.failed){playLine(l).catch(e=>{console.warn('TTS 音频失败，回退到语音合成',e);speakSynth(text)});return}
+ speakSynth(text)}
+function sayId(id,delay=0){const l=TTS.byId[id];if(!l)return;delay?setTimeout(()=>speak(l.text),delay):speak(l.text)}
+const REACT={croak:['react_croak',1700],wave:['react_wave',0],jump:['react_jump',150],hop_forward:['react_hop',100],happy_spin:['react_spin',200],sleep:['react_sleep',0],look_around:['react_look',0],talk:['react_talk',0],idle:['greet1',0],sit_hug:['greet2',0]};
+function react(name){const r=REACT[name];if(r)sayId(r[0],r[1])}
+let introDone=false;addEventListener('pointerdown',()=>{if(introDone)return;introDone=true;ttsCtx();setTimeout(()=>{if(!TTS.clip&&!speech)sayId('intro')},250)},{capture:true});
+let speech=null; // 回退：浏览器语音合成的逐字节奏 {chars,t,per,end}
+let voices=[];const loadV=()=>{voices=speechSynthesis.getVoices()};if('speechSynthesis' in window){loadV();speechSynthesis.onvoiceschanged=loadV}
+const PUNC=/[，。！？、；：,.!?;:\s—…“”"'（）()]/;
+function speakSynth(text){stopSpeak();
+ const rate=+$('#rate').value;const per=0.24/rate;const chars=[...text];
+ speech={chars,t:0,per,end:chars.length*per+0.3};
+ if('speechSynthesis' in window){const u=new SpeechSynthesisUtterance(text);u.lang='zh-CN';u.rate=rate;u.pitch=+$('#pitch').value;
+  const v=voices.find(v=>/zh[-_]CN/i.test(v.lang))||voices.find(v=>/^zh/i.test(v.lang));if(v)u.voice=v;
+  u.onboundary=e=>{if(speech){speech.t=Math.min(e.charIndex,chars.length)*per}};
+  u.onstart=()=>{if(speech)speech.t=0};u.onend=()=>{if(speech)speech.end=Math.min(speech.end,speech.t+0.15)};
+  u.onerror=()=>{};speechSynthesis.speak(u);if(!voices.length)toast('未检测到中文语音包，仅播放口型动画')}
+ else toast('当前浏览器不支持语音合成，仅播放口型动画')}
+function stopSpeak(){if('speechSynthesis' in window)speechSynthesis.cancel();speech=null;if(TTS.src){try{TTS.src.stop()}catch(e){}TTS.src=null}TTS.clip=null}
+$('#sayBtn').onclick=()=>speak($('#say').value);$('#stopBtn').onclick=stopSpeak;
+['pitch','rate','speed'].forEach(id=>{const i=$('#'+id);i.addEventListener('input',()=>{i.nextElementSibling.textContent=(+i.value).toFixed(2);if(id==='speed'&&mixer)mixer.timeScale=+i.value})});
+let mic=null;$('#micBtn').onclick=async()=>{if(mic){mic.stream.getTracks().forEach(t=>t.stop());mic=null;$('#micBtn').classList.remove('on');return}
+ try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});const ac=new (window.AudioContext||window.webkitAudioContext)();const src=ac.createMediaStreamSource(stream);const an=ac.createAnalyser();an.fftSize=1024;src.connect(an);
+  mic={stream,an,buf:new Float32Array(1024),lvl:0};$('#micBtn').classList.add('on');toast('对着麦克风说话，青跃会跟着张嘴')}catch(e){toast('无法打开麦克风（需要 https 或 localhost 并授权）')}};
+// ---------- croak sound
+let AC=null;function ribbit(pitch=1){if(!$('#sound').checked)return;try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();const t0=AC.currentTime;
+ for(let k=0;k<2;k++){const t=t0+k*0.22;const o=AC.createOscillator();o.type='sawtooth';o.frequency.setValueAtTime(150*pitch,t);o.frequency.linearRampToValueAtTime(110*pitch,t+0.16);
+  const am=AC.createOscillator();am.frequency.value=38;const amg=AC.createGain();amg.gain.value=0.5;am.connect(amg);
+  const g=AC.createGain();g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(0.35,t+0.02);g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
+  const bp=AC.createBiquadFilter();bp.type='bandpass';bp.frequency.value=700*pitch;bp.Q.value=2;amg.connect(g.gain);
+  o.connect(bp).connect(g).connect(AC.destination);o.start(t);am.start(t);o.stop(t+0.2);am.stop(t+0.2)}}catch(e){}}
+// ---------- pointer / picking
+const ray=new THREE.Raycaster(),ptr=new THREE.Vector2(0,0);let ptrActive=false;const lookTarget=new THREE.Vector3(0,0.68,3);
+canvas.addEventListener('pointermove',e=>{ptr.set(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1);ptrActive=true});
+let downAt=null;canvas.addEventListener('pointerdown',e=>{downAt=[e.clientX,e.clientY,performance.now()]});
+canvas.addEventListener('pointerup',e=>{if(!downAt||!model)return;const [x,y,t]=downAt;downAt=null;if(Math.hypot(e.clientX-x,e.clientY-y)>6||performance.now()-t>500)return;
+ ptr.set(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1);ray.setFromCamera(ptr,camera);
+ const hits=ray.intersectObject(model,true);if(!hits.length)return;const h=hits[0];const p=h.point.clone();model.worldToLocal(p);
+ let part='身体',act='jump';
+ if(h.object.name.includes('Crown')){part='小皇冠';act='happy_spin'}else if(h.object.name.startsWith('Qingyue_Vest')){part='科考背心';act='wave'}else if(h.object.name.includes('Eye')||h.object.name.includes('Lid')){part='眼睛';act='look_around'}
+ else if(p.y>0.53){part='头部';act='croak'}else if(Math.abs(p.x)>0.2&&p.y>0.3&&p.z>0.15){part=(p.x>0?'左':'右')+'臂';act='wave'}else if(p.y<0.3){part='腿/脚';act='hop'}
+ $('#sel').textContent='已选择部位：'+part;toast('点到了'+part+'！');act==='hop'?hop():play(act);react(act==='hop'?'hop_forward':act)});
+// ---------- UI misc
+document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.id===b.dataset.p));$('#panel').classList.remove('min')});
+$('#sheetT').onclick=()=>$('#panel').classList.toggle('min');
+$('#cardT').onclick=()=>{$('#card').classList.toggle('min');$('#cardT').textContent=$('#card').classList.contains('min')?'展开':'收起'};
+if(innerWidth<760){$('#card').classList.add('min');$('#cardT').textContent='展开'}
+$('#vestOn').onchange=e=>{setVest(e.target.checked);toast(e.target.checked?'穿上科考背心':'脱下背心');sayId(e.target.checked?'vest_on':'vest_off')};
+function setVest(on){for(const m of vestMeshes){m.visible=on}$('#vestOn').checked=on}
+$('#resetView').onclick=resetView;$('#autoRot').onchange=e=>controls.autoRotate=e.target.checked;controls.autoRotateSpeed=1.2;
+$('#shot').onclick=()=>{const a=document.createElement('a');a.download='青跃截图.png';a.href=canvas.toDataURL('image/png');a.click()};
+function resize(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h,false);camera.aspect=w/h;
+ if(w<760){camera.fov=40;HOME.tgt.set(0,0.18,0)}else{camera.fov=32;HOME.tgt.set(0.25,0.45,0)}camera.updateProjectionMatrix()}
+addEventListener('resize',resize);resize();resetView();
+// ---------- loop
+let hold=null;const clock=new THREE.Clock();const baseSnap=new Map();let blinkT=2,blinkV=0,tAll=0;const mw={};let jawExtra=0,eyeY=0,eyeX=0;
+function setMorph(k,v){for(const m of morphMeshes){const i=m.morphTargetDictionary[k];if(i!==undefined)m.morphTargetInfluences[i]=Math.min(1,Math.max(0,v))}}
+function tick(){requestAnimationFrame(tick);const dt=Math.min(clock.getDelta(),0.05);tAll+=dt;
+ for(const m of mists){m.position.x+=m.userData.v*dt;if(Math.abs(m.position.x)>7)m.userData.v*=-1}waterN.offset.x+=dt*0.01;waterN.offset.y+=dt*0.006;motes.rotation.y+=dt*0.01;
+ if(model){
+  if(turnTarget!==null){let d=turnTarget-frog.rotation.y;d=Math.atan2(Math.sin(d),Math.cos(d));frog.rotation.y+=d*Math.min(1,dt*6);if(Math.abs(d)<0.01)turnTarget=null}
+  // 每帧先撤销上一帧叠加的偏移（眨眼/张嘴/滑块/视线）：恢复到上一帧动作输出，再让 mixer 写入。
+  // （three.js 的 PropertyMixer 只在数值变化时才写骨骼，静止轨道不会自动覆盖叠加偏移，否则眼皮会卡在闭合）
+  for(const [b,s] of baseSnap){b.quaternion.copy(s.q);b.position.copy(s.p);b.scale.copy(s.s)}
+  if(!$('#freeze').checked){if(hold){actions[hold.n].time=hold.t;mixer.update(0)}else mixer.update(dt);forceApply();for(const b of Object.values(bones)){const s=baseSnap.get(b)||{q:new THREE.Quaternion(),p:new THREE.Vector3(),s:new THREE.Vector3()};s.q.copy(b.quaternion);s.p.copy(b.position);s.s.copy(b.scale);baseSnap.set(b,s)}}
+  else{for(const [b,s] of baseSnap){b.quaternion.copy(s.q);b.position.copy(s.p);b.scale.copy(s.s)}}
+  model.updateMatrixWorld(true);
+  // speech visemes
+  // v7 说话口型：只驱动下颌上下开合（≤8°）；不用任何改变嘴宽/嘴角的形态键
+  for(const k of ['viseme_A','viseme_E','viseme_O','viseme_U','mouth_open'])mw[k]=0;
+  let talkAmt=0;
+  if(TTS.clip&&TTS.an){TTS.an.getFloatTimeDomainData(TTS.buf);let s2=0;for(const v of TTS.buf)s2+=v*v;const rms=Math.sqrt(s2/TTS.buf.length);
+   const t=TTS.ac.currentTime-TTS.clip.t0;let gate=1;
+   if(TTS.clip.words.length){gate=TTS.clip.words.some(w=>t>=w.t-0.04&&t<=w.t+w.d+0.04)?1:0.25}   // 词边界内才充分张嘴
+   const target=Math.min(1,rms*7)*gate;TTS.env+=(target-TTS.env)*Math.min(1,dt*(target>TTS.env?30:14));talkAmt=TTS.env;
+   if(t>TTS.clip.dur+0.3)TTS.clip=null}
+  else TTS.env*=Math.max(0,1-dt*12);
+  if(speech){speech.t+=dt;const i=Math.floor(speech.t/speech.per);const ph=(speech.t/speech.per)%1;
+   if(speech.t>speech.end||i>=speech.chars.length+2){speech=null}else if(i<speech.chars.length&&!PUNC.test(speech.chars[i])){talkAmt=Math.max(talkAmt,Math.sin(Math.min(ph,1)*Math.PI))}}
+  if(mic){mic.an.getFloatTimeDomainData(mic.buf);let s=0;for(const x of mic.buf)s+=x*x;const r=Math.sqrt(s/mic.buf.length);mic.lvl+= (Math.min(1,r*9)-mic.lvl)*0.4;talkAmt=Math.max(talkAmt,mic.lvl)}
+  jawExtra+=(talkAmt*22-jawExtra)*Math.min(1,dt*18);
+  // blink
+  let bl=0;if($('#autoBlink').checked){blinkT-=dt;if(blinkT<0){blinkV=0.16;blinkT=2.5+Math.random()*3.5}if(blinkV>0){blinkV-=dt;bl=Math.sin((1-blinkV/0.16)*Math.PI)}}
+  // 眨眼改由眼皮骨骼沿弧线旋转（线性形变在半闭时会穿进眼球）；与动作里的闭眼取最大值，不叠加
+  const blinkAmt={'lid.L':Math.max(bl,morphVal.blink||0,morphVal.blink_L||0),'lid.R':Math.max(bl,morphVal.blink||0,morphVal.blink_R||0)};
+  setMorph('blink_L',0);setMorph('blink_R',0);
+  // 口型形变：每项 0–1，嘴部总量 ≤1
+  const mv={};let msum=0;for(const k of Object.keys(MOUTH_EQ)){mv[k]=THREE.MathUtils.clamp(Math.max(morphVal[k]||0,mw[k]||0),0,1);msum+=mv[k]}
+  if(msum>1)for(const k in mv)mv[k]/=msum;
+  let jawEq=0;for(const k in mv){setMorph(k,mv[k]);jawEq+=mv[k]*MOUTH_EQ[k]}
+  setMorph('smile',THREE.MathUtils.clamp(morphVal.smile||0,0,1));
+  setMorph('throat_puff',morphVal.throat_puff||0);   // v7: speech no longer puffs the throat (pure up/down mouth)
+  // bone offsets
+  const order=['spine','head','jaw','crown','upper_arm.L','forearm.L','upper_arm.R','forearm.R','thigh.L','thigh.R','foot.L','foot.R'];
+  const add={};BONE_SL.forEach((s,i)=>{const v=boneVal[i];if(!v||s[1]==='throatS'||s[1]==='eyes')return;(add[s[1]]=add[s[1]]||[]).push([s[2],v])});
+  const talking=!!(TTS.clip||speech||mic);
+  if(talking||jawExtra>0.05){(add.head=add.head||[]).push([[1,0,0],-talkAmt*3]);(add.jaw=add.jaw||[]).push([[1,0,0],jawExtra])}
+  for(const n of order){const b=B(n);if(add[n])for(const [ax,v] of add[n])rotBone(b,ax,v)}
+  const croaking=cur&&cur.getClip().name==='croak'&&cur.getEffectiveWeight()>0.5;
+  let jawCap=croaking?LIMIT.jawCroak:LIMIT.jawTotal;
+  if(!croaking&&(talking||(cur&&cur.getClip().name==='talk')))jawCap=Math.min(jawCap,22);   // v8: 说话时下颌最大 22°（仍只上下开合）
+  clampBone(B('jaw'),Math.max(0,jawCap-jawEq));          // 下颌硬上限：大张嘴不撕裂、不碰手臂
+  guardJaw(Math.max(0,jawCap-jawEq));                     // v5 手臂靠近下巴时再收紧（姿态级防穿插）
+  for(const n of ['lid.L','lid.R']){const b=B(n);const want=LIMIT.blink*blinkAmt[n],cur=bindAngle(b);if(want>cur+0.5)rotBone(b,LIDAX[n],want-cur);clampBone(b,LIMIT.blink)}
+  const ts=boneVal[BONE_SL.findIndex(s=>s[1]==='throatS')];if(ts&&ts!==1){const t=B('throat');t.scale.multiplyScalar(ts);t.updateMatrixWorld(true)}
+  // eyes
+  let ey=boneVal[BONE_SL.findIndex(s=>s[0]==='眼睛 左右看')]||0,ex=boneVal[BONE_SL.findIndex(s=>s[0]==='眼睛 上下看')]||0;
+  if($('#eyeFollow').checked&&ptrActive){ray.setFromCamera(ptr,camera);const head=B('head');const hp=head.getWorldPosition(new THREE.Vector3());
+   const camDir=camera.getWorldDirection(new THREE.Vector3());const dist=hp.distanceTo(camera.position);lookTarget.copy(ray.ray.origin).addScaledVector(ray.ray.direction,dist);
+   const hq=head.getWorldQuaternion(new THREE.Quaternion()).multiply(restQ.get(head).clone().invert());const d=lookTarget.clone().sub(hp).applyQuaternion(hq.invert());
+   const yaw=Math.atan2(d.x,d.z)*180/Math.PI,pit=Math.atan2(-d.y,Math.hypot(d.x,d.z))*180/Math.PI;
+   eyeY+=(THREE.MathUtils.clamp(yaw,-28,28)-eyeY)*Math.min(1,dt*10);eyeX+=(THREE.MathUtils.clamp(pit,-22,22)-eyeX)*Math.min(1,dt*10);ey+=eyeY;ex+=eyeX}
+  for(const n of ['eye.L','eye.R']){const b=B(n);rotBone(b,[0,1,0],ey);rotBone(b,[1,0,0],ex)}
+ }
+ controls.update();renderer.render(scene,camera)}
+tick();
+window.__api={at:(n,t)=>{play(n,0);hold={n,t}},release:()=>{hold=null},get mixer(){return mixer},play,speak,actions:()=>Object.keys(actions),setBone:(i,v)=>{boneVal[i]=v},setMorphVal:(k,v)=>{morphVal[k]=v},setVest:v=>setVest(v),sayId,ttsState:()=>({ready:TTS.ready,failed:TTS.failed,playing:TTS.clip?TTS.clip.id:null,ctx:TTS.ac?TTS.ac.state:null,env:TTS.env,played:TTS.played.slice(),jaw:B('jaw')?bindAngle(B('jaw')):0}),vestCount:()=>vestMeshes.length,debugAngles:()=>({sac:B('vsac')?B('vsac').scale.x:0,armChin:armChinDist(),uaL:bindAngle(B('upper_arm.L')),lidL:bindAngle(B('lid.L')),jaw:bindAngle(B('jaw')),thighL:bindAngle(B('thigh.L')),rootY:B('root').position.y,rootZ:B('root').position.z}),autoBlink:v=>{$('#autoBlink').checked=v},cam:camera,controls};
+</script>
+</body>
+</html>

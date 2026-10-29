@@ -1,0 +1,81 @@
+{
+ "id": "sci4",
+ "group": "科普",
+ "text": "夜晚的蛙鸣，就是我们在唱歌——呱呱呱！",
+ "file": "sci4.mp3",
+ "voice": "zh-CN-XiaoyiNeural",
+ "rate": "+6%",
+ "pitch": "+6Hz",
+ "key": "667c4032",
+ "duration": 4.08,
+ "words": [
+  {
+   "type": "WordBoundary",
+   "t": 0.097,
+   "d": 0.342,
+   "text": "夜晚"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.439,
+   "d": 0.071,
+   "text": "的"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.522,
+   "d": 0.189,
+   "text": "蛙"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.71,
+   "d": 0.283,
+   "text": "鸣"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.229,
+   "d": 0.177,
+   "text": "就"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.406,
+   "d": 0.083,
+   "text": "是"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.5,
+   "d": 0.189,
+   "text": "我们"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.689,
+   "d": 0.106,
+   "text": "在"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.807,
+   "d": 0.472,
+   "text": "唱歌"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 2.479,
+   "d": 0.637,
+   "text": "呱呱呱"
+  }
+ ],
+ "sentences": [
+  {
+   "type": "SentenceBoundary",
+   "t": 0.1,
+   "d": 3.83,
+   "text": "夜晚的蛙鸣，就是我们在唱歌——呱呱呱！"
+  }
+ ]
+}

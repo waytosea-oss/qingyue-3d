@@ -1,0 +1,45 @@
+{
+ "id": "react_wave",
+ "group": "动作反应",
+ "text": "嗨！你好呀！",
+ "file": "react_wave.mp3",
+ "voice": "zh-CN-XiaoyiNeural",
+ "rate": "+6%",
+ "pitch": "+6Hz",
+ "key": "a297253e",
+ "duration": 2.284,
+ "words": [
+  {
+   "type": "WordBoundary",
+   "t": 0.097,
+   "d": 0.318,
+   "text": "嗨"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 0.943,
+   "d": 0.259,
+   "text": "你好"
+  },
+  {
+   "type": "WordBoundary",
+   "t": 1.203,
+   "d": 0.165,
+   "text": "呀"
+  }
+ ],
+ "sentences": [
+  {
+   "type": "SentenceBoundary",
+   "t": 0.1,
+   "d": 0.846,
+   "text": "嗨！"
+  },
+  {
+   "type": "SentenceBoundary",
+   "t": 0.896,
+   "d": 1.238,
+   "text": "你好呀！"
+  }
+ ]
+}
