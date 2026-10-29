@@ -496,7 +496,11 @@ function obstacleAt(x,z,y){for(const o of OBST){const ox=o.pad.x+o.ox,oz=o.pad.z
 function fwdOf(yaw){return new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw))}
 // v10: WASD relative to the camera (W = into the screen). First-person: relative to the frog; in mode 1 A/D turn in place and S turns around (see controller / keys)
 const FP=()=>CAM.mode==='first'&&!CAM.pinned;
-function camInput(){const f=new THREE.Vector3();if(FP())f.copy(fwdOf(CTRL.yaw));else{camera.getWorldDirection(f);f.y=0;if(f.lengthSq()<1e-6)f.set(0,0,-1);f.normalize()}const r=new THREE.Vector3(-f.z,0,f.x);const v=new THREE.Vector3();
+// v10 C2: the control frame is latched when a move key goes down and kept until all move keys are released.
+// Without the latch the follow camera swings behind the turning frog, "screen-right" rotates with it and holding D runs circles.
+const MOVE_KEYS=['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'];let IN_FRAME=null;
+function camInput(){const f=new THREE.Vector3();if(FP())f.copy(fwdOf(CTRL.yaw));else{const held=MOVE_KEYS.some(k=>KEYS.has(k));
+  if(!held||!IN_FRAME||CAM.drag){camera.getWorldDirection(f);f.y=0;if(f.lengthSq()<1e-6)f.set(0,0,-1);f.normalize();IN_FRAME=held?f.clone():null}else f.copy(IN_FRAME)}const r=new THREE.Vector3(-f.z,0,f.x);const v=new THREE.Vector3();
  const hopFP=FP()&&CTRL.mode===1;
  if(KEYS.has('w')||KEYS.has('arrowup'))v.add(f);if(hopFP)return v.lengthSq()?v.normalize():null;
  if(KEYS.has('s')||KEYS.has('arrowdown'))v.sub(f);if(KEYS.has('d')||KEYS.has('arrowright'))v.add(r);if(KEYS.has('a')||KEYS.has('arrowleft'))v.sub(r);
@@ -543,7 +547,7 @@ function swimUpdate(dt){const k=KEYS;let fwdIn=0;
    CTRL.yaw=easeTurn(CTRL.yaw,CTRL.yaw+d,dt,6,4.5);const d2=wrapA(Math.atan2(dir.x,dir.z)-CTRL.yaw);fwdIn=Math.pow(Math.max(0,Math.cos(d2)),1.5)}}   // v10 C2: identical to land: W/S/A/D = screen directions; S turns the frog round toward the camera, then it swims
  CTRL.spd+=(fwdIn*1.5-CTRL.spd)*Math.min(1,dt*(fwdIn?1.8:1.2));
  if(up)CTRL.vy+=2.2*dt;else if(down)CTRL.vy-=2.2*dt;else if(frog.position.y<SWIM_SURF)CTRL.vy+=(SWIM_SURF-frog.position.y)*0.9*dt;   // buoyancy floats it back up
- CTRL.vy*=Math.pow(0.25,dt);CTRL.vy=THREE.MathUtils.clamp(CTRL.vy,-1.1,1.1);
+ CTRL.vy*=Math.pow((up||down)?0.25:0.03,dt);CTRL.vy=THREE.MathUtils.clamp(CTRL.vy,-1.1,1.1);   // v10 C2: rise/sink stop promptly when their key is released
  const f=fwdOf(CTRL.yaw),p=frog.position;let nx=p.x+f.x*CTRL.spd*dt,nz=p.z+f.z*CTRL.spd*dt;if(!inPond(nx,nz)){nx=p.x;nz=p.z;CTRL.spd*=0.3}
  let ny=p.y+CTRL.vy*dt;const ceil=surfaceAt(nx,nz)?SWIM_SURF-0.26:SWIM_SURF;   // can't surface through a lily pad
  if(ny>ceil){ny=Math.max(ceil,ny+(ceil-ny)*Math.min(1,dt*5));CTRL.vy=Math.min(CTRL.vy,0)}   // eases down to swimming depth

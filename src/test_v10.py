@@ -216,6 +216,50 @@ async def desktop(b):
     errs=[l for l in logs if l[0] in ('error','pageerror','http')]
     check('desktop: no console errors / no HTTP errors',not errs,str(errs[:3]))
     await pg.close()
+async def c2(b):
+    """C2: one camera-relative control scheme for land, surface and under water"""
+    pg=await b.new_page(viewport={'width':1280,'height':800}); logs=[]
+    pg.on('pageerror',lambda e:logs.append(('pageerror',str(e))))
+    await pg.goto(URL); await pg.wait_for_function('window.__ready===true',timeout=180000); await pg.wait_for_timeout(1000)
+    OPEN="""(()=>{const P=window.__pond;const s=P.state();for(let r=4;r<18;r+=0.5)for(let a=0;a<6.28;a+=0.25){const x=Math.cos(a)*r,z=Math.sin(a)*r;
+       let ok=true;for(let i=0;i<s.pads;i++){const p=P.padInfo(i);if(Math.hypot(p.x-x,p.z-z)<p.r+3.2){ok=false;break}}if(ok)return[x,z]}})()"""
+    ox,oz=await pg.evaluate(OPEN); CY=0.9   # fixed camera heading for every measurement
+    async def track(key,ms):   # per-frame positions while the key is held
+        await pg.evaluate("(()=>{window.__tr=[];const f=()=>{const s=window.__pond.state();window.__tr.push([s.x,s.y,s.z,s.yaw]);if(window.__tr.length<400)requestAnimationFrame(f)};requestAnimationFrame(f)})()")
+        await pg.keyboard.down(key); await pg.wait_for_timeout(ms); await pg.keyboard.up(key); await pg.wait_for_timeout(250)
+        return await pg.evaluate('window.__tr')
+    def heading(tr,frac=0.5):   # direction of travel over the last part of the motion (after the eased turn)
+        a=tr[int(len(tr)*frac)]; z=tr[-1]; return math.atan2(z[0]-a[0],z[2]-a[2]),math.hypot(z[0]-a[0],z[2]-a[2])
+    async def camdir():
+        d=(await v10(pg))['cam']['dir']; return math.atan2(d[0],d[2])
+    res={}
+    for key in ('w','d'):
+        await pg.evaluate("window.__pond.reset()"); await pg.wait_for_timeout(500); await pg.evaluate("window.__pond.camYaw(%f)"%CY); await pg.wait_for_timeout(400)
+        cdl=await camdir(); s0=await st(pg); await pg.keyboard.down(key); await pg.wait_for_timeout(500); await pg.keyboard.up(key); await pg.wait_for_timeout(1500); s1=await st(pg)
+        land=math.atan2(s1['x']-s0['x'],s1['z']-s0['z'])
+        await pg.evaluate("window.__pond.placeWater(%f,%f,%f)"%(ox,oz,CY+2.0)); await pg.wait_for_timeout(300); await pg.evaluate("window.__pond.camYaw(%f)"%CY); await pg.wait_for_timeout(500)
+        cdw=await camdir(); tr=await track(key,2600); water,dist=heading(tr)
+        res[key]=(land-cdl,water-cdw,dist)
+        check('C2: same camera heading -> %s moves the same screen direction on land and in the water (<5 deg)'%key.upper(),
+              abs(wrap((land-cdl)-(water-cdw)))<math.radians(5) and dist>0.3,
+              'land %.1f deg, water %.1f deg rel. to the camera (water swim %.2f m)'%(math.degrees(wrap(land-cdl)),math.degrees(wrap(water-cdw)),dist))
+    await pg.evaluate("window.__pond.placeWater(%f,%f,%f)"%(ox,oz,CY)); await pg.wait_for_timeout(300); await pg.evaluate("window.__pond.camYaw(%f)"%CY); await pg.wait_for_timeout(500)
+    cd=await camdir(); tr=await track('s',3000); h,dist=heading(tr,0.6)
+    check('C2: S in the water turns the frog round and swims toward the camera (not tank back-pedal)',abs(wrap(h-(cd+math.pi)))<math.radians(8) and dist>0.3 and abs(wrap(tr[-1][3]-(cd+math.pi)))<0.3,
+          'travel %.1f deg from "toward camera", frog faces %.1f deg off'%(math.degrees(wrap(h-(cd+math.pi))),math.degrees(wrap(tr[-1][3]-(cd+math.pi)))))
+    await pg.evaluate("window.__pond.placeWater(%f,%f,%f)"%(ox,oz,CY)); await pg.wait_for_timeout(400)   # open water again (the S swim may have reached a pad)
+    await pg.keyboard.down('e'); await pg.wait_for_timeout(1200); await pg.keyboard.up('e'); await pg.wait_for_timeout(600); y0=(await st(pg))['y']
+    tr=await track('w',1200); ys=[p[1] for p in tr]
+    check('C2: under water, W swims level - it never dives on its own (only Shift/E dive, Space/Q rise)',min(ys)>=y0-0.02,'y start %.2f, lowest %.2f'%(y0,min(ys)))
+    # land -> water: no direction flip, no camera jump
+    await pg.evaluate("window.__pond.reset()"); await pg.wait_for_timeout(500); await pg.evaluate("window.__pond.camYaw(%f)"%CY); await pg.wait_for_timeout(300)
+    await pg.evaluate("(()=>{window.__cj=[];let last=null;const f=()=>{const c=window.__pond.v10().cam.pos,s=window.__pond.state();if(last)window.__cj.push([Math.hypot(c[0]-last[0],c[1]-last[1],c[2]-last[2]),s.yaw,s.where]);last=c;if(window.__cj.length<240)requestAnimationFrame(f)};requestAnimationFrame(f)})()")
+    await pg.keyboard.press('3'); await pg.wait_for_timeout(3500); cj=await pg.evaluate('window.__cj')
+    yaws=[c[1] for c in cj]; flips=max(abs(wrap(yaws[i+1]-yaws[i])) for i in range(len(yaws)-1)); jump=max(c[0] for c in cj)
+    check('C2: diving in from a lily pad keeps the heading and the camera moves smoothly (no flip, no jump)',flips<0.35 and jump<0.35 and cj[-1][2]=='water',
+          'largest per-frame turn %.2f rad, largest camera step %.2f m'%(flips,jump))
+    check('C2: no page errors',not logs,str(logs[:2]))
+    await pg.close()
 async def phone(b):
     ctx=await b.new_context(viewport={'width':390,'height':844},device_scale_factor=3,is_mobile=True,has_touch=True)
     pg=await ctx.new_page(); logs=[]; watch(pg,logs)
@@ -249,7 +293,7 @@ async def phone(b):
 async def main():
     async with async_playwright() as p:
         b=await p.chromium.launch(channel='chrome')
-        await desktop(b); await phone(b); await b.close()
+        await desktop(b); await c2(b); await phone(b); await b.close()
     txt='\n'.join(R)+'\n\nRESULT: '+('ALL PASS' if ok_all else 'FAILURES')+' (%d checks)\n'%len(R)
     open(os.path.join(ROOT,'test_v10_report.txt'),'w',encoding='utf-8').write(txt); print('RESULT',ok_all)
 asyncio.run(main())
