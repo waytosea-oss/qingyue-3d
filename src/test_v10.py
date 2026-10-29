@@ -2,7 +2,7 @@
 # camera modes (follow / free / first person), recenter + collision + long-jump aim, headlamp on the vine crown, minimap creature icons,
 # new pond-side plants, fog vs sky, lightning, phone viewport (390x844).
 # usage: python src/test_v10.py [url] [screens dir]   -> prints PASS/FAIL per check, writes test_v10_report.txt + screenshots
-import asyncio,sys,math,os
+import asyncio,os,sys,math
 from playwright.async_api import async_playwright
 URL=sys.argv[1] if len(sys.argv)>1 else 'http://127.0.0.1:18977/qingyue-pond.html'
 ROOT=os.path.join(os.path.dirname(os.path.abspath(__file__)),'..')
@@ -66,8 +66,10 @@ async def desktop(b):
         await pg.wait_for_timeout(250)
         t=(await v10(pg))['turtles'][i]
         if t['surf']=='bask': break
+    await pg.evaluate("window.__pond.mmLayer('radar')"); await pg.wait_for_timeout(200)   # E'': creatures are only drawn on the 生物雷达 layer
     v=await v10(pg); ic=[x for x in v['minimap']['icons'] if x['kind']=='turtle'][i]
-    check('turtles: a swimmer surfaces to breathe (opaque icon on the minimap while up)',t['surf']=='bask' and t['y']>-0.2 and ic['alpha']==1,'state %s, y %.2f, icon alpha %.2f'%(t['surf'],t['y'],ic['alpha']))
+    check('turtles: a swimmer surfaces to breathe (opaque icon on the creature radar while up)',t['surf']=='bask' and t['y']>-0.2 and ic['alpha']==1,'state %s, y %.2f, icon alpha %.2f'%(t['surf'],t['y'],ic['alpha']))
+    await pg.evaluate("window.__pond.mmLayer('env')")
     d0=(await aud(pg))['events']['turtleDive']; await pg.evaluate("window.__pond.placeWater(%f,%f,0)"%(t['x']+1.2,t['z'])); await pg.wait_for_timeout(1200)
     t2=(await v10(pg))['turtles'][i]; d1=(await aud(pg))['events']['turtleDive']
     check('audio: the turtle dives when the frog comes close -> plop / splash sound',t2['surf']=='swim' and d1>d0,'state %s, dives +%d'%(t2['surf'],d1-d0))
@@ -178,22 +180,37 @@ async def desktop(b):
     await pg.evaluate("window.__pond.camLook(1.6,1.1,1.9,0,0.75,0.3,30)"); await pg.wait_for_timeout(400); await shot(pg,'headlamp_crown_v10.png')
     await pg.evaluate("window.__pond.setTod('night')"); await pg.wait_for_timeout(3000); await pg.evaluate("window.__pond.camLook(-1.6,1.4,-2.2,0.4,0.5,1.5,40)"); await pg.wait_for_timeout(400); await shot(pg,'headlamp_crown_night_v10.png')
     await pg.evaluate("window.__pond.setLamp(false);window.__pond.reset()"); await pg.wait_for_timeout(800)
-    # ================= E. minimap creatures
-    v=await v10(pg); icons=v['minimap']['icons']; tu=[x for x in icons if x['kind']=='turtle']; fi=[x for x in icons if x['kind']=='fish']
-    check('minimap: turtles and fish schools drawn as their own icons (translucent while under water)',len(tu)==len(v['turtles'])>=6 and len(fi)==6 and len({x['sp'] for x in fi})==3 and all(x['alpha']<1 for x in fi),'%d turtle icons, %d fish-school icons (%s)'%(len(tu),len(fi),'/'.join(sorted({x['sp'] for x in fi}))))
-    px=await pg.evaluate("(()=>{const c=document.querySelector('#mmc'),x=c.getContext('2d'),k=c.width/c.clientWidth;return window.__pond.v10().minimap.icons.map(i=>{const d=x.getImageData(Math.round(i.x*k)-2,Math.round(i.y*k)-2,5,5).data;let r=0,g=0,b=0;for(let j=0;j<d.length;j+=4){r+=d[j];g+=d[j+1];b+=d[j+2]}return[i.kind,r/25,g/25,b/25]})})()")
-    tc=[p for p in px if p[0]=='turtle']; fc=[p for p in px if p[0]=='fish']
-    okT=sum(1 for p in tc if p[2]>p[3]+15 and p[2]>60)>=len(tc)-1; okF=sum(1 for p in fc if p[1]+p[2]>200)>=len(fc)-1
-    check('minimap: icon pixels are really there (olive turtle shells, light fish)',okT and okF,'turtles %s / fish %s'%(['%d,%d,%d'%tuple(p[1:]) for p in tc[:3]],['%d,%d,%d'%tuple(p[1:]) for p in fc[:3]]))
+    # ================= E''. minimap layers: 环境地图 (default, no creatures) -> 生物雷达 (only large animals, never fish) -> 关闭; B / on-map button
+    PIX="(()=>{const c=document.querySelector('#mmc'),x=c.getContext('2d'),k=c.width/c.clientWidth;return window.__pond.v10().minimap.icons.map(i=>{const d=x.getImageData(Math.round(i.x*k)-2,Math.round(i.y*k)-2,5,5).data;let r=0,g=0,b=0;for(let j=0;j<d.length;j+=4){r+=d[j];g+=d[j+1];b+=d[j+2]}return[i.kind,r/25,g/25,b/25]})})()"
+    await pg.evaluate("window.__pond.reset();window.__pond.mmLayer('env')"); await pg.wait_for_timeout(600); v=await v10(pg); mm=v['minimap']
+    check('minimap layers: registry has 环境地图 / 生物雷达 / 关闭, default = 环境地图 and its name is shown on the map',mm['layers']==['env','radar','off'] and mm['layer']=='env' and '环境地图' in mm['label'],'%s, label "%s"'%(mm['layers'],mm['label']))
+    check('minimap 环境地图: no creatures at all (no turtles / fish / birds drawn)',mm['on'] and len(mm['icons'])==0,'%d creature icons'%len(mm['icons']))
+    await pg.keyboard.press('b'); await pg.wait_for_timeout(500); v=await v10(pg); mm=v['minimap']; icons=mm['icons']
+    tu=[x for x in icons if x['kind']=='turtle']; fi=[x for x in icons if x['kind']=='fish']; bi=[x for x in icons if x['kind']=='bird']
+    bigVisible=[b for b in v['birds'] if b['big'] and b['visible']]
+    check('minimap 生物雷达 (B): only large animals - every turtle + visible egrets/night herons, never the fish schools',mm['layer']=='radar' and '生物雷达' in mm['label'] and len(tu)==len(v['turtles'])>=10 and len(fi)==0 and len(bi)==len(bigVisible),
+          '%d turtles, %d big birds, %d fish'%(len(tu),len(bi),len(fi)))
+    px=await pg.evaluate(PIX); tc=[p for p in px if p[0]=='turtle']
+    check('minimap 生物雷达: turtle blips are really drawn (bright green on the radar), under-water ones translucent',sum(1 for p in tc if p[2]>p[1]+20 and p[2]>60)>=len(tc)-1 and any(x['alpha']<1 for x in tu),
+          'blips %s'%(['%d,%d,%d'%tuple(p[1:]) for p in tc[:3]]))
+    await pg.keyboard.press('b'); await pg.wait_for_timeout(400); v=await v10(pg)
+    vis=await pg.evaluate("getComputedStyle(document.querySelector('#mm')).display")
+    check('minimap 关闭 (B again): the map is hidden, a small button brings it back',v['minimap']['layer']=='off' and not v['minimap']['on'] and vis=='none')
+    await pg.click('#mmShow'); await pg.wait_for_timeout(300); v=await v10(pg); l1=v['minimap']['layer']
+    await pg.click('#mmLayer'); await pg.wait_for_timeout(300); l2=(await v10(pg))['minimap']['layer']
+    check('minimap: on-map button cycles the layers too (show -> 环境地图, click -> 生物雷达)',l1=='env' and l2=='radar','%s -> %s'%(l1,l2))
+    await pg.evaluate("window.__pond.setZoom(2)"); await pg.wait_for_timeout(900); await shot(pg,'minimap_radar_v10.png',hud=True)
+    await pg.evaluate("(()=>{const c=document.querySelector('#mm');c.style.transform='scale(2.2)';c.style.transformOrigin='left bottom'})()"); await pg.wait_for_timeout(300)
+    await shot(pg,'minimap_radar_zoom_v10.png',hud=True)
+    await pg.evaluate("window.__pond.mmLayer('env')"); await pg.wait_for_timeout(300); await shot(pg,'minimap_env_zoom_v10.png',hud=True)
+    await pg.evaluate("document.querySelector('#mm').style.transform='';window.__pond.setZoom(1)")
+    v=await v10(pg)
     near=[t for t in v['turtles'] if math.hypot(t['x'],t['z'])<6]
-    check('turtles: more of them, around the start pad where the player meets them',len(v['turtles'])>=6 and len(near)>=4,'%d turtles, %d within 6 m of the start'%(len(v['turtles']),len(near)))
+    check('turtles: more of them, around the start pad where the player meets them',len(v['turtles'])>=10 and len(near)>=6,'%d turtles, %d within 6 m of the start'%(len(v['turtles']),len(near)))
     await pg.evaluate("window.__pond.setHint(true)"); tt=[t for t in v['turtles'] if not t['swimmer']][1]
     await pg.evaluate("window.__pond.placeWater(%f,%f,0)"%(tt['x']+0.5,tt['z'])); await hold(pg,'e',2000); await pg.wait_for_timeout(600)
     h=(await v10(pg))['hint']; toast=await pg.evaluate("document.querySelector('#toast').textContent")
     check('minimap / hint: swimming up to a creature shows an on-screen hint',('乌龟' in h['last']) and h['now']-h['lastT']<3,'hint "%s", toast "%s"'%(h['last'],toast))
-    await pg.evaluate("window.__pond.reset();window.__pond.setZoom(2)"); await pg.wait_for_timeout(1200); await shot(pg,'minimap_creatures_v10.png',hud=True)
-    await pg.evaluate("(()=>{const c=document.querySelector('#mm');c.style.transform='scale(2.2)';c.style.transformOrigin='left bottom'})()"); await pg.wait_for_timeout(300)
-    await shot(pg,'minimap_creatures_zoom_v10.png',hud=True); await pg.evaluate("document.querySelector('#mm').style.transform='';window.__pond.setZoom(1)")
     # ================= F. plants, fog, lightning
     v=await v10(pg)
     need=['Reeds','ReedPlumes','Cattails','WillowTrunks','WillowCrowns','WillowStrands','MetasequoiaTrunks','MetasequoiaCrowns','BankShrubs']
@@ -260,6 +277,90 @@ async def c2(b):
           'largest per-frame turn %.2f rad, largest camera step %.2f m'%(flips,jump))
     check('C2: no page errors',not logs,str(logs[:2]))
     await pg.close()
+async def birds_trees(b):
+    """J: reed-bed birds; F: nicer trees that fade to silhouettes (not white) in rain / fog; lightning frame"""
+    pg=await b.new_page(viewport={'width':1280,'height':800}); logs=[]
+    pg.on('pageerror',lambda e:logs.append(('pageerror',str(e))))
+    pg.on('console',lambda m:logs.append(('error',m.text)) if m.type=='error' else None)
+    await pg.goto(URL); await pg.wait_for_function('window.__ready===true',timeout=180000); await pg.wait_for_timeout(800)
+    await pg.mouse.click(640,400); await pg.wait_for_timeout(300)   # first gesture unlocks audio
+    await pg.evaluate("document.body.classList.add('nopanel')")
+    async def birds(): return (await v10(pg))['birds']
+    async def wait_birds(cond,secs=25):
+        for _ in range(int(secs*4)):
+            await pg.wait_for_timeout(250); bs=await birds()
+            if cond(bs): return bs
+        return bs
+    async def look_at(bd,dist=2.6,side=1.2,h=0.9,fov=40):
+        s=await st(pg); a=math.atan2(bd['z'],bd['x']); dx,dz=bd['x']-s['x'],bd['z']-s['z']
+        await pg.evaluate("window.__pond.camLook(%f,%f,%f,%f,%f,%f,%d)"%(dx-math.cos(a)*dist+math.sin(a)*side,h,dz-math.sin(a)*dist-math.cos(a)*side,dx,bd['y']-s['y']-0.1,dz,fov))
+    info=await pg.evaluate("window.__pond.birdModels()")
+    check('birds: modelled, not placeholders - lathe bodies, tube S-necks, shaped notched wings, jointed legs (>= 10 parts each)',
+          all(m['meshes']>=10 and 'LatheGeometry' in m['types'] and 'TubeGeometry' in m['types'] and 'ShapeGeometry' in m['types'] for m in info if m['kind'] in ('egret','heron')),
+          '; '.join('%s %d parts (%s)'%(m['kind'],m['meshes'],'/'.join(sorted(set(m['types'])))) for m in info[:2]))
+    # night: night herons roost in the reeds, no egrets
+    await pg.evaluate("window.__pond.setTod('night',true);window.__pond.setWeather('clear',true)")
+    bs=await wait_birds(lambda bs:any(x['kind']=='heron' and x['state'] in ('stand','forage') for x in bs) and not any(x['kind']=='egret' and x['visible'] for x in bs))
+    he=[x for x in bs if x['kind']=='heron' and x['state'] in ('stand','forage')]
+    check('birds: at night the night herons (夜鹭) stand in the reeds, egrets are away',len(he)>=1 and not any(x['kind']=='egret' and x['visible'] for x in bs),'%d herons landed'%len(he))
+    if he: await look_at(he[0]); await pg.evaluate("window.__pond.setLamp(true)"); await pg.wait_for_timeout(900); await shot(pg,'night_heron_v10.png'); await pg.evaluate("window.__pond.setLamp(false)")
+    # day: egrets + kingfisher + grebes; herons leave
+    await pg.evaluate("window.__pond.setTod('day',true)")
+    bs=await wait_birds(lambda bs:sum(1 for x in bs if x['kind']=='egret' and x['state'] in ('stand','forage'))>=2 and not any(x['kind']=='heron' and x['visible'] for x in bs),35)
+    eg=[x for x in bs if x['kind']=='egret' and x['state'] in ('stand','forage')]
+    check('birds: by day egrets (白鹭) wade in the shallows, the night herons have left',len(eg)>=2 and not any(x['kind']=='heron' and x['visible'] for x in bs),'%d egrets landed'%len(eg))
+    gr=[x for x in bs if x['kind']=='grebe' and x['visible']]
+    check('birds: little grebes (小䴙䴘) swim on the water',len(gr)>=1 and all(abs(x['y'])<0.08 or x['state']=='dive' for x in gr),', '.join('%s y %.2f'%(x['state'],x['y']) for x in gr))
+    necks=[]
+    for _ in range(40):
+        await pg.wait_for_timeout(150); necks+= [x['neck'] for x in await birds() if x['kind']=='egret' and x['state']=='forage']
+    check('birds: egrets forage - the neck dips down to peck',necks and max(necks)>0.8,'max neck pitch %.2f rad'%(max(necks) if necks else 0))
+    if eg: await look_at(eg[0]); await pg.wait_for_timeout(900); await shot(pg,'egret_day_v10.png')
+    if gr: await look_at(gr[0],dist=2.0,side=0.8,h=0.5); await pg.wait_for_timeout(700); await shot(pg,'grebe_v10.png')
+    # the frog swims up -> alarm call + wing beats, the egret takes off, circles and lands back
+    bs=await birds(); i=next(k for k,x in enumerate(bs) if x['kind']=='egret' and x['state'] in ('stand','forage')); e=bs[i]
+    a0=(await aud(pg))['events']; a=math.atan2(e['z'],e['x'])
+    await pg.evaluate("window.__pond.placeWater(%f,%f,0)"%(e['x']-math.cos(a)*1.8,e['z']-math.sin(a)*1.8)); await pg.wait_for_timeout(500)
+    b1=(await birds())[i]; a1=(await aud(pg))['events']
+    check('birds: the frog comes close -> the egret flies off with an alarm call and wing beats',b1['state']=='fly' and a1.get('birdFlee',0)>a0.get('birdFlee',0) and a1.get('wings',0)>a0.get('wings',0) and a1.get('birdCall',0)>a0.get('birdCall',0),
+          'state %s, flee +%d, wings +%d, calls +%d'%(b1['state'],a1.get('birdFlee',0)-a0.get('birdFlee',0),a1.get('wings',0)-a0.get('wings',0),a1.get('birdCall',0)-a0.get('birdCall',0)))
+    ws=[]
+    for _ in range(12):
+        await pg.wait_for_timeout(60); ws.append((await birds())[i]['wing'])
+    check('birds: wings really flap in flight',max(ws)-min(ws)>0.6,'wing angle %.2f .. %.2f rad'%(min(ws),max(ws)))
+    await pg.evaluate("(()=>{const s=window.__pond.state();window.__pond.camLook(-2.5,1.6,-3.5,0,1.5,0,55)})()"); await pg.wait_for_timeout(300); await shot(pg,'birds_flee_v10.png')
+    await pg.evaluate("window.__pond.reset()")
+    bs=await wait_birds(lambda bs:bs[i]['state'] in ('stand','forage'),30)
+    check('birds: after flying off, the egret circles back and lands in the reeds again',bs[i]['state'] in ('stand','forage'),'state %s'%bs[i]['state'])
+    # rain / storm: birds shelter in the reeds (crouched, pulled back into the reed bed)
+    r0={k:math.hypot(x['x'],x['z']) for k,x in enumerate(bs) if x['kind']=='egret' and x['state'] in ('stand','forage')}
+    await pg.evaluate("window.__pond.setWeather('rain')")
+    bs=await wait_birds(lambda bs:all(bs[k]['crouch']<-0.02 and math.hypot(bs[k]['x'],bs[k]['z'])-r0[k]>0.8 for k in r0),25)
+    moved=[math.hypot(bs[k]['x'],bs[k]['z'])-r0[k] for k in r0]
+    check('birds: in rain they shelter in the reeds (crouch, move back into the reed bed)',all(bs[k]['crouch']<-0.02 for k in r0) and all(m>0.8 for m in moved),'moved back %s m'%['%.1f'%m for m in moved])
+    await pg.evaluate("window.__pond.setWeather('clear')")
+    # F: trees fade to darker silhouettes in rain / fog (not white); lightning frame
+    tp=await pg.evaluate("window.__pond.treeProbe()")
+    check('trees: every pond-side plant material uses the silhouette fog',tp['silhouette'])
+    for wx in ('rain','fog'):
+        await pg.evaluate("window.__pond.setTod('day',true);window.__pond.setWeather('%s',true);window.__pond.camLook(4.5,2.4,6.5,-6,3.0,-10,60)"%wx); await pg.wait_for_timeout(1500)
+        tp=await pg.evaluate("window.__pond.treeProbe()"); png=await pg.screenshot(); open(os.path.join(SHOT,'trees_%s_v10.png'%wx),'wb').write(png)
+        from PIL import Image; import io; im=Image.open(io.BytesIO(png)).convert('RGB'); W,H=im.size; k=W/1280
+        def lum(x,y):
+            px=[im.getpixel((min(W-1,max(0,int(x*k)+dx)),min(H-1,max(0,int(y*k)+dy)))) for dx in (-3,0,3) for dy in (-3,0,3)]
+            return sum(0.2126*p[0]+0.7152*p[1]+0.0722*p[2] for p in px)/len(px)/255
+        far=[t for t in tp['trees'] if t['dist']>14]; diffs=[lum(t['x'],t['skyY'])-lum(t['x'],t['y']) for t in far]
+        check('trees (%s): far trees stay darker silhouettes against the sky, not washed white'%wx,len(far)>=3 and sum(1 for d in diffs if d>0.05)>=len(far)*0.8,
+              '%d far trees, sky - tree luminance %s'%(len(far),['%.2f'%d for d in diffs[:6]]))
+    await pg.evaluate("window.__pond.setWeather('clear',true)"); await pg.wait_for_timeout(600); await shot(pg,'trees_day_v10.png')
+    await pg.evaluate("window.__pond.setTod('night',true);window.__pond.setWeather('storm',true);window.__pond.camLook(4.5,2.4,6.5,-6,4.5,-10,64)"); await pg.wait_for_timeout(1500)
+    await pg.evaluate("window.__pond.flashHold(true);window.__pond.strike({dist:450})"); await pg.wait_for_timeout(300)
+    png=await pg.screenshot(); open(os.path.join(SHOT,'storm_lightning_v10.png'),'wb').write(png)
+    from PIL import Image; import io; im=Image.open(io.BytesIO(png)).convert('L'); hist=im.histogram(); bright=sum(hist[245:])
+    check('lightning: the captured storm frame really contains the bolt (many near-white pixels)',bright>1500,'%d near-white pixels'%bright)
+    await pg.evaluate("window.__pond.flashHold(false)")
+    check('birds / trees page: no console errors',not logs,str(logs[:2]))
+    await pg.close()
 async def phone(b):
     ctx=await b.new_context(viewport={'width':390,'height':844},device_scale_factor=3,is_mobile=True,has_touch=True)
     pg=await ctx.new_page(); logs=[]; watch(pg,logs)
@@ -283,7 +384,11 @@ async def phone(b):
     await pg.tap('#muteBtn'); await pg.wait_for_timeout(400); m=(await aud(pg))['muted']; await pg.tap('#muteBtn'); await pg.wait_for_timeout(300)
     check('phone: HUD 🔊 button mutes / unmutes',m and not (await aud(pg))['muted'])
     await pg.tap('#mmShow'); await pg.wait_for_timeout(700); v=await v10(pg)
-    check('phone: minimap shows creature icons (fewer turtles on phones)',v['minimap']['on'] and len([x for x in v['minimap']['icons'] if x['kind']=='turtle'])>=4,'%d icons'%len(v['minimap']['icons']))
+    await pg.evaluate("window.__pond.mmLayer('radar')"); await pg.wait_for_timeout(300); v=await v10(pg)
+    check('phone: creature radar shows the turtles (fewer on phones), never fish',v['minimap']['on'] and 5<=len([x for x in v['minimap']['icons'] if x['kind']=='turtle'])<=8 and not any(x['kind']=='fish' for x in v['minimap']['icons']),'%d icons'%len(v['minimap']['icons']))
+    r=await pg.evaluate("(()=>{const b=document.querySelector('#mmLayer').getBoundingClientRect();return[b.width,b.height]})()")
+    check('phone: the minimap layer button is big enough to tap',r[0]>=22 and r[1]>=22,'%.0fx%.0f px'%tuple(r))
+    await pg.evaluate("window.__pond.mmLayer('env')")
     await pg.evaluate("window.__pond.setTod('night');window.__pond.setWeather('rain')"); await pg.wait_for_timeout(3000)
     await pg.screenshot(path=os.path.join(SHOT,'phone_390x844_v10.png'))
     await pg.evaluate("window.__pond.setTod('day');window.__pond.setWeather('clear')"); await pg.wait_for_timeout(3500); await pg.screenshot(path=os.path.join(SHOT,'phone_390x844_day_v10.png'))
@@ -293,7 +398,7 @@ async def phone(b):
 async def main():
     async with async_playwright() as p:
         b=await p.chromium.launch(channel='chrome')
-        await desktop(b); await c2(b); await phone(b); await b.close()
+        await desktop(b); await c2(b); await birds_trees(b); await phone(b); await b.close()
     txt='\n'.join(R)+'\n\nRESULT: '+('ALL PASS' if ok_all else 'FAILURES')+' (%d checks)\n'%len(R)
     open(os.path.join(ROOT,'test_v10_report.txt'),'w',encoding='utf-8').write(txt); print('RESULT',ok_all)
 asyncio.run(main())
