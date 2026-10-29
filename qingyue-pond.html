@@ -50,6 +50,7 @@ body.nopanel #panel{display:none}body.nopanel #card{display:none}
  #panel.min{height:96px}
  #sheetT{display:block;margin:6px auto 0;width:44px;height:5px;border-radius:3px;background:#0002;border:0;flex:none}
  #hint{display:none}.grid{grid-template-columns:repeat(3,1fr)}.btn{font-size:14px;padding:10px 4px}
+ .hud{left:3vw;right:3vw;transform:none;max-width:none;padding:7px 8px}.hud .modes{gap:5px}.hud .modes button{padding:6px 9px}   /* v10: full-width HUD on phones (it used to shrink to half the screen and wrap) */
 }
 </style>
 <script type="importmap">
@@ -128,7 +129,7 @@ const camera=new THREE.PerspectiveCamera(42,1,0.05,400);
 const controls=new OrbitControls(camera,canvas);controls.enableDamping=true;controls.minDistance=1.6;controls.maxDistance=14;controls.maxPolarAngle=Math.PI*0.62;controls.enablePan=false;
 const HOME={pos:new THREE.Vector3(2.2,1.7,4.2),tgt:new THREE.Vector3(0,0.45,0)};
 // v10 camera rig: follow (third person, behind the frog) / free (v8 orbit) / first (frog's-eye view). 'pinned' = a scripted shot (test/screenshot hooks) -> behaves like free.
-const CAM={mode:'follow',pinned:false,yaw:0,elev:0.31,dist:4.8,DEF_ELEV:0.31,DEF_DIST:4.8,drag:null,pinch:null,lastDrag:-99,recenter:false,autoRecenter:true,aim:0,
+const CAM={mode:'follow',pinned:false,yaw:0,elev:0.31,dist:4.8,DEF_ELEV:IS_MOBILE?0.46:0.31,DEF_DIST:IS_MOBILE?5.6:4.8,drag:null,pinch:null,lastDrag:-99,recenter:false,autoRecenter:true,aim:0,
  tgt:new THREE.Vector3(),under:false,fpYaw:0,fpPitch:-0.1,snap:true};
 const CAM_MODES=['follow','free','first'],CAM_NAME={follow:'跟随',free:'自由',first:'第一人称'};
 const wrapA=a=>Math.atan2(Math.sin(a),Math.cos(a));
@@ -608,7 +609,11 @@ function camUpdate(dt){const F=frog.position;const dF=_ct.copy(F).sub(CTRL.lastF
  if(CAM.under){dist=Math.min(dist,3.0);el=Math.min(el,0.2)}
  const want=_ct.copy(CAM.tgt).add(_ce.set(Math.sin(CAM.yaw)*Math.cos(el),Math.sin(el),Math.cos(CAM.yaw)*Math.cos(el)).multiplyScalar(dist));
  // collision: above water stay clear of the surface and the lily pads; under water stay below the surface and above the floor
- if(CAM.under){want.y=clampN(want.y,FLOOR_Y+0.3,WY-0.22)}else want.y=Math.max(want.y,WY+0.3);
+ if(CAM.under){want.y=clampN(want.y,FLOOR_Y+0.3,WY-0.22);
+  const ax=CAM.tgt.x,az=CAM.tgt.z,bx=want.x-ax,bz=want.z-az,L2=bx*bx+bz*bz;let tMin=1;   // a lily-pad stem between frog and camera -> pull the camera in front of it
+  if(L2>0.01)for(const p of PADS){const t=((p.x-ax)*bx+(p.z-az)*bz)/L2;if(t>0.15&&t<tMin){const dx=ax+bx*t-p.x,dz=az+bz*t-p.z;if(dx*dx+dz*dz<0.18*0.18)tMin=t}}
+  if(tMin<1){const k=Math.max(0.25,tMin-0.3/Math.sqrt(L2));want.x=ax+bx*k;want.z=az+bz*k}}
+ else want.y=Math.max(want.y,WY+0.3);
  if(CAM.snap){camera.position.copy(want);CAM.snap=false}else camera.position.lerp(want,1-Math.exp(-dt*12));
  camera.lookAt(CAM.tgt);controls.target.copy(CAM.tgt)}
 function setCamMode(m,silent){if(!CAM_NAME[m])return;const was=CAM.mode;CAM.mode=m;CAM.pinned=false;
