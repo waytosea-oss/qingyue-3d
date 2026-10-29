@@ -128,24 +128,35 @@ function resetView(){const f=(typeof frog!=='undefined')?frog.position:new THREE
 function noiseTex(size,fn){const c=document.createElement('canvas');c.width=c.height=size;const x=c.getContext('2d');fn(x,size);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;return t}
 const rnd=(()=>{let s=20261029;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296}})();   // deterministic layout
 // --- night sky: gradient dome + stars + moon (also rendered into the environment map -> reflections on water/skin)
-const MOON_DIR=new THREE.Vector3(-0.42,0.52,-0.74).normalize();
+const MOON_DIR=new THREE.Vector3(-0.42,0.52,-0.74).normalize();let STARS,MOON_GLOW;
+// v9: sky colours / sun / clouds / lightning flash are uniforms driven by the time-of-day + weather system (defaults = the v8 night)
 function makeSky(){const g=new THREE.Group();
- const dome=new THREE.Mesh(new THREE.SphereGeometry(180,48,24),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:false,uniforms:{md:{value:MOON_DIR}},
+ const U={md:{value:MOON_DIR},top:{value:new THREE.Color(.012,.025,.07)},mid:{value:new THREE.Color(.03,.07,.16)},hor:{value:new THREE.Color(.07,.13,.20)},
+  moonGlow:{value:1},sd:{value:new THREE.Vector3(0.5,0.6,-0.6).normalize()},sunCol:{value:new THREE.Color(1,.95,.8)},sunAmt:{value:0},cloud:{value:0},cloudCol:{value:new THREE.Color(.1,.12,.16)},flash:{value:0},uT:{value:0}};
+ const dome=new THREE.Mesh(new THREE.SphereGeometry(180,48,24),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:false,uniforms:U,
   vertexShader:'varying vec3 vp;void main(){vp=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-  fragmentShader:`uniform vec3 md;varying vec3 vp;void main(){float h=vp.y;vec3 top=vec3(.012,.025,.07),mid=vec3(.03,.07,.16),hor=vec3(.07,.13,.20);
-   vec3 c=mix(hor,mid,smoothstep(-.02,.25,h));c=mix(c,top,smoothstep(.25,.9,h));float m=max(dot(vp,md),0.);c+=vec3(.35,.45,.6)*pow(m,40.)*.6+vec3(.2,.28,.4)*pow(m,6.)*.25;
-   if(h<0.)c=mix(hor,vec3(.01,.02,.03),smoothstep(0.,-.2,h));gl_FragColor=vec4(c,1.);}`}));g.add(dome);
- const moon=new THREE.Mesh(new THREE.SphereGeometry(5,32,16),new THREE.MeshBasicMaterial({color:0xf4f1de,fog:false}));moon.position.copy(MOON_DIR).multiplyScalar(160);g.add(moon);
- return g}
+  fragmentShader:`uniform vec3 md,top,mid,hor,sd,sunCol,cloudCol;uniform float moonGlow,sunAmt,cloud,flash,uT;varying vec3 vp;
+   float h2(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+   float n2(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h2(i),h2(i+vec2(1,0)),f.x),mix(h2(i+vec2(0,1)),h2(i+vec2(1,1)),f.x),f.y);}
+   float fbm(vec2 p){float v=0.,a=.5;for(int k=0;k<5;k++){v+=a*n2(p);p*=2.03;a*=.5;}return v;}
+   void main(){float h=vp.y;
+   vec3 c=mix(hor,mid,smoothstep(-.02,.25,h));c=mix(c,top,smoothstep(.25,.9,h));float m=max(dot(vp,md),0.);c+=(vec3(.35,.45,.6)*pow(m,40.)*.6+vec3(.2,.28,.4)*pow(m,6.)*.25)*moonGlow;
+   float s=max(dot(vp,sd),0.);c+=sunCol*(pow(s,900.)*6.+pow(s,60.)*.5+pow(s,6.)*.18)*sunAmt;
+   if(cloud>0.001&&h>-.02){vec2 q=vp.xz/(h+.18)*1.6+vec2(uT*.012,uT*.006);float f=fbm(q);float cov=smoothstep(1.-cloud*1.05,1.15-cloud*.55,f+cloud*.35);
+    vec3 cc=cloudCol*(.75+.5*f)+sunCol*pow(s,8.)*.25*sunAmt;c=mix(c,cc,cov*smoothstep(-.02,.12,h));}
+   if(h<0.)c=mix(hor,vec3(.01,.02,.03)*(1.+sunAmt*6.),smoothstep(0.,-.2,h));
+   c+=vec3(.75,.8,1.)*flash;gl_FragColor=vec4(c,1.);}`}));g.add(dome);
+ const moon=new THREE.Mesh(new THREE.SphereGeometry(5,32,16),new THREE.MeshBasicMaterial({color:0xf4f1de,fog:false,transparent:true}));moon.position.copy(MOON_DIR).multiplyScalar(160);g.add(moon);
+ g.userData={U,moon};return g}
 const sky=makeSky();scene.add(sky);
 {const n=2600,p=new Float32Array(n*3),c=new Float32Array(n*3);for(let i=0;i<n;i++){let x,y,z;do{x=rnd()*2-1;y=rnd();z=rnd()*2-1}while(x*x+y*y+z*z>1);const v=new THREE.Vector3(x,y*0.95+0.05,z).normalize().multiplyScalar(170);p.set([v.x,v.y,v.z],i*3);const b=0.5+rnd()*0.5;c.set([b,b,b*1.05],i*3)}
  const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(p,3));geo.setAttribute('color',new THREE.BufferAttribute(c,3));
- scene.add(new THREE.Points(geo,new THREE.PointsMaterial({size:1.6,sizeAttenuation:false,vertexColors:true,fog:false,transparent:true,opacity:0.9,depthWrite:false})))}
+ scene.add(STARS=new THREE.Points(geo,new THREE.PointsMaterial({size:1.6,sizeAttenuation:false,vertexColors:true,fog:false,transparent:true,opacity:0.9,depthWrite:false})))}
 const glowTex=noiseTex(128,(x,s)=>{const g=x.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2);g.addColorStop(0,'rgba(255,255,240,1)');g.addColorStop(.25,'rgba(220,235,255,.45)');g.addColorStop(1,'rgba(200,220,255,0)');x.fillStyle=g;x.fillRect(0,0,s,s)});
-{const s=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,color:0xcfe0ff,transparent:true,opacity:0.8,depthWrite:false,fog:false,blending:THREE.AdditiveBlending}));s.position.copy(MOON_DIR).multiplyScalar(158);s.scale.set(70,70,1);scene.add(s)}
-const pmrem=new THREE.PMREMGenerator(renderer);{const es=new THREE.Scene();es.add(makeSky());scene.environment=pmrem.fromScene(es,0.02).texture}scene.environmentIntensity=0.9;
+{const s=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,color:0xcfe0ff,transparent:true,opacity:0.8,depthWrite:false,fog:false,blending:THREE.AdditiveBlending}));s.position.copy(MOON_DIR).multiplyScalar(158);s.scale.set(70,70,1);scene.add(s);MOON_GLOW=s}
+const pmrem=new THREE.PMREMGenerator(renderer);const ENV_SKY=makeSky();{const es=new THREE.Scene();es.add(ENV_SKY);scene.environment=pmrem.fromScene(es,0.02).texture}scene.environmentIntensity=0.9;
 // --- lights: moonlight key (shadows follow the frog) + soft blue fill + faint warm bounce
-scene.add(new THREE.HemisphereLight(0x3b5288,0x0b1a10,0.6));
+const hemi=new THREE.HemisphereLight(0x3b5288,0x0b1a10,0.6);scene.add(hemi);
 const key=new THREE.DirectionalLight(0xc9dcff,1.35);key.castShadow=true;key.shadow.mapSize.set(2048,2048);
 Object.assign(key.shadow.camera,{left:-4,right:4,top:4,bottom:-4,near:0.5,far:40});key.shadow.bias=-0.0004;key.shadow.normalBias=0.02;scene.add(key);scene.add(key.target);
 const fill=new THREE.DirectionalLight(0x7f9cd6,0.7);fill.position.set(4,3,5);scene.add(fill);
@@ -208,10 +219,11 @@ function makeLotus(pad){const g=new THREE.Group();const pm=new THREE.MeshStandar
  OBST.push({pad,ox,oz,r:0.36,h:0.5})}
 PADS.filter((p,i)=>i>10&&p.r>0.9).slice(0,9).forEach(makeLotus);
 // shore: dark bank ring, reeds, distant tree silhouettes
-{const bank=new THREE.Mesh(new THREE.RingGeometry(POND_R+1,POND_R+60,96,1),new THREE.MeshStandardMaterial({color:0x0e1a10,roughness:1}));bank.rotation.x=-Math.PI/2;bank.position.y=WY+0.05;scene.add(bank);
- const n=520,geo=new THREE.ConeGeometry(0.03,1,4);geo.translate(0,0.5,0);const m=new THREE.InstancedMesh(geo,new THREE.MeshStandardMaterial({color:0x2c3d22,roughness:0.9}),n);const M=new THREE.Matrix4(),q=new THREE.Quaternion();
+const SHORE={};
+{const bank=new THREE.Mesh(new THREE.RingGeometry(POND_R+1,POND_R+60,96,1),SHORE.bank=new THREE.MeshStandardMaterial({color:0x0e1a10,roughness:1}));bank.rotation.x=-Math.PI/2;bank.position.y=WY+0.05;scene.add(bank);
+ const n=520,geo=new THREE.ConeGeometry(0.03,1,4);geo.translate(0,0.5,0);const m=new THREE.InstancedMesh(geo,SHORE.reed=new THREE.MeshStandardMaterial({color:0x2c3d22,roughness:0.9}),n);const M=new THREE.Matrix4(),q=new THREE.Quaternion();
  for(let i=0;i<n;i++){const a=rnd()*6.283,r=POND_R-1.5+rnd()*4,h=1.2+rnd()*2.4;q.setFromEuler(new THREE.Euler((rnd()-.5)*0.25,0,(rnd()-.5)*0.25));M.compose(new THREE.Vector3(Math.cos(a)*r,WY-0.2,Math.sin(a)*r),q,new THREE.Vector3(1,h,1));m.setMatrixAt(i,M)}scene.add(m);
- const tm=new THREE.MeshStandardMaterial({color:0x07110b,roughness:1});for(let i=0;i<46;i++){const a=rnd()*6.283,r=POND_R+12+rnd()*22,h=6+rnd()*9;const t=new THREE.Mesh(new THREE.ConeGeometry(1.6+rnd()*2.2,h,7),tm);t.position.set(Math.cos(a)*r,WY+h/2,Math.sin(a)*r);scene.add(t)}}
+ const tm=SHORE.tree=new THREE.MeshStandardMaterial({color:0x07110b,roughness:1});for(let i=0;i<46;i++){const a=rnd()*6.283,r=POND_R+12+rnd()*22,h=6+rnd()*9;const t=new THREE.Mesh(new THREE.ConeGeometry(1.6+rnd()*2.2,h,7),tm);t.position.set(Math.cos(a)*r,WY+h/2,Math.sin(a)*r);scene.add(t)}}
 // fireflies
 const FF_N=70;const ffGeo=new THREE.BufferGeometry();const ffP=new Float32Array(FF_N*3),ffSeed=[];
 for(let i=0;i<FF_N;i++){const a=rnd()*6.283,r=1.5+rnd()*14;ffSeed.push({x:Math.cos(a)*r,z:Math.sin(a)*r,y:0.3+rnd()*1.6,ph:rnd()*6.28,sp:0.3+rnd()*0.5})}
@@ -227,7 +239,7 @@ function sceneUpdate(dt,t){waterN.offset.x+=dt*0.012;waterN.offset.y+=dt*0.008;S
   p.grp.position.y=WY+0.02+p.off+Math.sin(t*0.8+p.x)*0.004;p.grp.rotation.x=p.tz;p.grp.rotation.z=-p.tx}
  for(let i=RINGS.length-1;i>=0;i--){const r=RINGS[i];r.userData.t+=dt;const u=r.userData.t;if(u<0){r.visible=false;continue}r.visible=true;r.scale.setScalar((0.2+u*1.6)*r.userData.s);r.material.opacity=Math.max(0,0.6*(1-u/1.2));if(u>1.2){scene.remove(r);RINGS.splice(i,1)}}
  // underwater look when the camera dives
- const under=camera.position.y<WY;scene.fog.color.copy(under?UNDER_FOG:NIGHT_FOG);scene.fog.density=under?0.28:0.022;renderer.toneMappingExposure=under?1.25:1.05;document.body.classList.toggle('under',under)}
+ const under=camera.position.y<WY;atmoApply(under);document.body.classList.toggle('under',under)}
 
 // ---------- frog
 const frog=new THREE.Group();frog.position.set(0,0.03,0);frog.rotation.order='YXZ';scene.add(frog);
@@ -401,7 +413,7 @@ const MODE_NAME={1:'普通跳',2:'远跳',3:'游泳'};
 const HINT={1:'WASD / 方向键：一跳一跳地走（按住连续跳）· 跳进水里自动切换游泳',
  2:'WASD / 方向键 或 点击荷叶/水面：放置目标 · Space / Enter：起跳 · 最远 3.6 米（绿=可跳，红=超距或受阻）',
  3:'W / S：前进 / 后退 · A / D：左右转向 · Space / Q：上浮 · Shift / E：下潜 · 游到荷叶边按 W 爬上去'};
-const COMMON='T 说话 · C 鸣叫 · V 背心 · L 头灯 · M 小地图 · R 回起点 · 1/2/3 切换模式 · 鼠标拖动旋转视角';
+const COMMON='T 说话 · C 鸣叫 · V 背心 · L 头灯 · M 小地图 · N 时段 · G 天气 · R 回起点 · 1/2/3 切换模式 · 鼠标拖动旋转视角';
 const smooth=t=>{t=Math.min(1,Math.max(0,t));return t*t*(3-2*t)};
 function surfaceAt(x,z){for(const p of PADS){const dx=x-p.x,dz=z-p.z;if(dx*dx+dz*dz<(p.r*0.9)**2)return p}return null}
 function inPond(x,z){return Math.hypot(x,z)<POND_R-0.8}
@@ -477,7 +489,7 @@ function controllerUpdate(dt){if(!model||CTRL.paused)return;
  // follow camera + moonlight shadow box around the frog
  const d=frog.position.clone().sub(CTRL.lastFrog);camera.position.add(d);controls.target.add(d);CTRL.lastFrog.copy(frog.position);
  if(camera.position.y<FLOOR_Y+0.35)camera.position.y=FLOOR_Y+0.35;
- key.position.copy(frog.position).addScaledVector(MOON_DIR,14);key.target.position.copy(frog.position);bounce.position.copy(frog.position).add(new THREE.Vector3(0.8,1.3,1.6));
+ key.position.copy(frog.position).addScaledVector(KEY_DIR,14);key.target.position.copy(frog.position);bounce.position.copy(frog.position).add(new THREE.Vector3(0.8,1.3,1.6));
  hudUpdate()}
 // --- modes, HUD, keys
 function setMode(m,silent){m=+m;if(m!==1&&m!==2&&m!==3)return;
@@ -703,6 +715,203 @@ function drawMinimap(){if(!V9.mm.on)return;const cv=V9.mm.cv,dpr=Math.min(device
  x.translate(fx,fy);x.rotate(-CTRL.yaw);x.fillStyle='#ffd34d';x.strokeStyle='#1b1300';x.lineWidth=1.2*dpr;x.beginPath();x.moveTo(0,7*dpr);x.lineTo(-4.5*dpr,-4*dpr);x.lineTo(0,-2*dpr);x.lineTo(4.5*dpr,-4*dpr);x.closePath();x.fill();x.stroke();
  x.restore();x.fillStyle='rgba(220,235,255,.8)';x.font=`${10*dpr}px sans-serif`;x.textAlign='center';x.fillText('N',R,12*dpr);x.fillText(z>1?z+'×':'',R,S-8*dpr);
  V9.mm.frogPx=[fx/dpr,fy/dpr]}
+// ---------------------------------------------------------------- 4) 昼夜与天气（时段 N · 天气 G）
+// presets are blended with smoothly moving weights, so any time/weather switch cross-fades sky, lights, fog and water colours
+const QUALITY={low:{rain:600,snow:450,rip:20,dfly:3},high:{rain:2400,snow:1600,rip:64,dfly:6}};
+const QMAX=QUALITY.high;
+const col=h=>new THREE.Color(h);
+const TODS=['day','dusk','night'],TOD_NAME={day:'白天',dusk:'黄昏',night:'夜晚'};
+const TOD={
+ day:{top:col('#2f6fc4'),mid:col('#7fb0e2'),hor:col('#d6e4ea'),sun:new THREE.Vector3(0.42,0.8,-0.43).normalize(),sunCol:col('#fff1d2'),sunAmt:1,moon:0,stars:0,cloudCol:col('#f4f6f8'),
+  key:col('#fff0cc'),keyI:2.3,hs:col('#d6e6ff'),hg:col('#5d6e3c'),hI:0.95,fill:col('#bcd4f4'),fillI:0.45,bounceI:0.2,fog:col('#bccfd6'),fogD:0.011,under:col('#1d6560'),underD:0.2,
+  water:col('#2f625c'),exp:1.0,env:1.0,rim:col('#fff4dc'),rimK:0.35,ff:0,dfly:1,bank:col('#3b5130'),reed:col('#5d7838'),tree:col('#284526')},
+ dusk:{top:col('#25386e'),mid:col('#7a628e'),hor:col('#f09a62'),sun:new THREE.Vector3(0.86,0.1,-0.5).normalize(),sunCol:col('#ffb070'),sunAmt:0.9,moon:0.35,stars:0.25,cloudCol:col('#b98a8a'),
+  key:col('#ffb57e'),keyI:1.6,hs:col('#9a86b2'),hg:col('#2c2a1a'),hI:0.6,fill:col('#7c88c8'),fillI:0.55,bounceI:0.7,fog:col('#5e5266'),fogD:0.018,under:col('#123a3c'),underD:0.25,
+  water:col('#1d343c'),exp:1.05,env:0.95,rim:col('#ffc9a2'),rimK:0.7,ff:0.45,dfly:0.35,bank:col('#1d2616'),reed:col('#3a4628'),tree:col('#121a10')},
+ night:{top:new THREE.Color(.012,.025,.07),mid:new THREE.Color(.03,.07,.16),hor:new THREE.Color(.07,.13,.20),sun:new THREE.Vector3(0.6,-0.4,-0.6).normalize(),sunCol:col('#000000'),sunAmt:0,moon:1,stars:1,cloudCol:col('#1a2232'),
+  key:col('#c9dcff'),keyI:1.35,hs:col('#3b5288'),hg:col('#0b1a10'),hI:0.6,fill:col('#7f9cd6'),fillI:0.7,bounceI:0.9,fog:NIGHT_FOG.clone(),fogD:0.022,under:UNDER_FOG.clone(),underD:0.28,
+  water:col('#0a2a30'),exp:1.05,env:0.9,rim:col('#a9c6ff'),rimK:1,ff:1,dfly:0,bank:col('#0e1a10'),reed:col('#2c3d22'),tree:col('#07110b')}};
+const WXS=['clear','overcast','rain','fog','snow','storm'],WX_NAME={clear:'晴',overcast:'阴',rain:'雨',fog:'雾',snow:'雪',storm:'雷雨'};
+// cloud cover, sky desaturation / darkening, key-light factor, fog multiplier + grey tint, particles, lightning
+const WX={clear:{cloud:0,desat:0,dark:1,keyK:1,fogK:1,fogGrey:0,rain:0,snow:0,bolt:0,wave:0.32,ffK:1,dflyK:1},
+ overcast:{cloud:0.85,desat:0.55,dark:0.78,keyK:0.38,fogK:1.6,fogGrey:0.35,rain:0,snow:0,bolt:0,wave:0.36,ffK:0.8,dflyK:0.6},
+ rain:{cloud:0.95,desat:0.7,dark:0.62,keyK:0.3,fogK:2.3,fogGrey:0.5,rain:1,snow:0,bolt:0,wave:0.5,ffK:0.15,dflyK:0},
+ fog:{cloud:0.35,desat:0.6,dark:0.9,keyK:0.55,fogK:6.5,fogGrey:0.75,rain:0,snow:0,bolt:0,wave:0.28,ffK:0.6,dflyK:0.3},
+ snow:{cloud:0.8,desat:0.75,dark:0.92,keyK:0.5,fogK:2.6,fogGrey:0.6,rain:0,snow:1,bolt:0,wave:0.22,ffK:0,dflyK:0},
+ storm:{cloud:1,desat:0.8,dark:0.45,keyK:0.2,fogK:2.7,fogGrey:0.45,rain:1.6,snow:0,bolt:1,wave:0.62,ffK:0,dflyK:0}};
+const KEY_DIR=MOON_DIR.clone();
+const ATMO={tod:'night',wx:'clear',wT:{day:0,dusk:0,night:1},wW:{clear:1,overcast:0,rain:0,fog:0,snow:0,storm:0},
+ quality:IS_MOBILE?'low':'high',flash:0,strikes:0,nextBolt:6,thunder:false,envMaps:null,envIdx:-1,cur:null,
+ out:{fogC:new THREE.Color(),fogD:0.022,underC:new THREE.Color(),underD:0.28,exp:1.05}};
+const _c=new THREE.Color(),_c2=new THREE.Color(),_grey=new THREE.Color();
+function blendC(dst,P,W,key){dst.setRGB(0,0,0);for(const k in W){if(W[k]>1e-4)dst.add(_c.copy(P[k][key]).multiplyScalar(W[k]))}return dst}
+function blendN(P,W,key){let v=0;for(const k in W)v+=P[k][key]*W[k];return v}
+function wxShade(c,desat,dark){const l=c.r*0.3+c.g*0.55+c.b*0.15;_grey.setRGB(l,l*1.02,l*1.06);return c.lerp(_grey,desat).multiplyScalar(dark)}
+// --- rain streaks (shader-driven, wrap around the camera -> no per-frame CPU work)
+const RAIN_BOX=new THREE.Vector3(22,12,22);
+const rainU={uT:{value:0},uCam:{value:new THREE.Vector3()},uBox:{value:RAIN_BOX},uOp:{value:0},uCol:{value:new THREE.Color(0xb8c8dc)}};
+const rain=(()=>{const n=QMAX.rain,seed=new Float32Array(n*6),end=new Float32Array(n*2);
+ for(let i=0;i<n;i++){const a=r9(),b=r9(),c=r9();seed.set([a,b,c,a,b,c],i*6);end[i*2+1]=1}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(n*6),3));g.setAttribute('aSeed',new THREE.BufferAttribute(seed,3));g.setAttribute('aEnd',new THREE.BufferAttribute(end,1));
+ const m=new THREE.LineSegments(g,new THREE.ShaderMaterial({transparent:true,depthWrite:false,fog:false,uniforms:rainU,
+  vertexShader:`uniform float uT;uniform vec3 uCam,uBox;attribute vec3 aSeed;attribute float aEnd;varying float vA;
+   void main(){vec3 p=aSeed*uBox;p.x+=uBox.x*floor((uCam.x-p.x)/uBox.x+.5);p.z+=uBox.z*floor((uCam.z-p.z)/uBox.z+.5);
+    p.y=${WY.toFixed(1)}+mod(aSeed.y*uBox.y-uT*(9.+3.*aSeed.z),uBox.y)+aEnd*.42;p.x+=aEnd*.05;
+    vec4 mv=modelViewMatrix*vec4(p,1.);vA=(1.-aEnd*.75)*(1.-smoothstep(6.,uBox.x*.5,length(mv.xyz)));gl_Position=projectionMatrix*mv;}`,
+  fragmentShader:'uniform float uOp;uniform vec3 uCol;varying float vA;void main(){gl_FragColor=vec4(uCol,vA*uOp);}'}));
+ m.frustumCulled=false;m.renderOrder=7;m.visible=false;m.name='Rain';scene.add(m);return m})();
+// --- ripple rings where drops hit the water (instanced, each instance respawns at a new hashed spot every cycle)
+const ripU={uT:{value:0},uCam:{value:new THREE.Vector3()},uAmt:{value:0},uCol:{value:new THREE.Color(0xd8e6f4)}};
+const ripples=(()=>{const geo=new THREE.RingGeometry(0.86,1,28);const n=QMAX.rip,sd=new Float32Array(n*3);for(let i=0;i<n;i++)sd.set([r9(),r9(),r9()],i*3);
+ geo.setAttribute('iSeed',new THREE.InstancedBufferAttribute(sd,3));
+ const m=new THREE.InstancedMesh(geo,new THREE.ShaderMaterial({transparent:true,depthWrite:false,fog:false,side:THREE.DoubleSide,uniforms:ripU,
+  vertexShader:`uniform float uT;uniform vec3 uCam;attribute vec3 iSeed;varying float vA;
+   void main(){float cyc=uT*(.8+iSeed.z*.7)+iSeed.z*13.;float k=floor(cyc),ph=fract(cyc);
+    vec2 c=vec2(fract(sin(k*12.9898+iSeed.x*78.233)*43758.5453),fract(sin(k*39.346+iSeed.y*11.135)*43758.5453));c=(c-.5)*16.+uCam.xz;
+    float s=.04+ph*.32;vec3 p=vec3(position.x*s+c.x,${(WY+0.012).toFixed(3)},-position.y*s+c.y);
+    vA=(1.-ph)*(1.-ph)*step(length(c),${(POND_R-1).toFixed(1)});vec4 mv=modelViewMatrix*vec4(p,1.);vA*=1.-smoothstep(5.,9.,length(mv.xyz));gl_Position=projectionMatrix*mv;}`,
+  fragmentShader:'uniform float uAmt;uniform vec3 uCol;varying float vA;void main(){gl_FragColor=vec4(uCol,vA*uAmt*.55);}'}),n);
+ m.frustumCulled=false;m.renderOrder=3;m.visible=false;m.name='RainRipples';scene.add(m);return m})();
+// --- snow flakes (soft round points drifting down with a slow swirl)
+const SNOW_BOX=new THREE.Vector3(18,10,18);
+const snowU={uT:{value:0},uCam:{value:new THREE.Vector3()},uBox:{value:SNOW_BOX},uOp:{value:0},uPx:{value:1}};
+const snow=(()=>{const n=QMAX.snow,sd=new Float32Array(n*3);for(let i=0;i<n;i++)sd.set([r9(),r9(),r9()],i*3);
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(n*3),3));g.setAttribute('aSeed',new THREE.BufferAttribute(sd,3));
+ const m=new THREE.Points(g,new THREE.ShaderMaterial({transparent:true,depthWrite:false,fog:false,uniforms:snowU,
+  vertexShader:`uniform float uT,uPx;uniform vec3 uCam,uBox;attribute vec3 aSeed;varying float vA;
+   void main(){vec3 p=aSeed*uBox;p.x+=sin(uT*.7+aSeed.z*40.)*.45;p.z+=cos(uT*.55+aSeed.x*40.)*.45;
+    p.x+=uBox.x*floor((uCam.x-p.x)/uBox.x+.5);p.z+=uBox.z*floor((uCam.z-p.z)/uBox.z+.5);p.y=${WY.toFixed(1)}+mod(aSeed.y*uBox.y-uT*(.55+.4*aSeed.z),uBox.y);
+    vec4 mv=modelViewMatrix*vec4(p,1.);gl_PointSize=uPx*(.05+.05*aSeed.z)*420./max(.3,-mv.z);vA=1.-smoothstep(5.,uBox.x*.5,length(mv.xyz));gl_Position=projectionMatrix*mv;}`,
+  fragmentShader:'uniform float uOp;varying float vA;void main(){float d=length(gl_PointCoord-.5);if(d>.5)discard;gl_FragColor=vec4(vec3(.96,.97,1.),smoothstep(.5,.18,d)*vA*uOp);}'}));
+ m.frustumCulled=false;m.renderOrder=7;m.visible=false;m.name='Snow';scene.add(m);return m})();
+// --- lightning: a jagged far bolt + sky / light flash, optional synthesized thunder
+const bolt=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0xf2f4ff,transparent:true,opacity:0,fog:false,depthWrite:false,blending:THREE.AdditiveBlending}));bolt.frustumCulled=false;bolt.renderOrder=1;scene.add(bolt);
+function makeBolt(){const a=r9()*6.28,d=120,top=new THREE.Vector3(Math.cos(a)*d,72,Math.sin(a)*d);const pts=[top.clone()];let p=top.clone();
+ for(let i=0;i<22;i++){p=p.clone().add(new THREE.Vector3((r9()-.5)*7,-3.3,(r9()-.5)*7));pts.push(p)}bolt.geometry.dispose();bolt.geometry=new THREE.BufferGeometry().setFromPoints(pts)}
+let THUNDER_BUF=null;function thunder(delay){try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();if(AC.state==='suspended')AC.resume();
+ if(!THUNDER_BUF){const sr=AC.sampleRate,d=3.4,b=AC.createBuffer(1,sr*d|0,sr),x=b.getChannelData(0);let l=0,l2=0;
+  for(let i=0;i<x.length;i++){const t=i/sr;l=l*0.97+(Math.random()*2-1)*0.3;l2=l2*0.995+l*0.05;x[i]=(l*0.35+l2*2.2)*Math.exp(-t*1.1)*Math.min(1,t/0.04)*(1+0.7*Math.max(0,Math.sin(t*5.3)))}THUNDER_BUF=b}
+ const s=AC.createBufferSource();s.buffer=THUNDER_BUF;const f=AC.createBiquadFilter();f.type='lowpass';f.frequency.value=420;const g=AC.createGain();g.gain.value=0.85;s.connect(f).connect(g).connect(AC.destination);s.start(AC.currentTime+delay)}catch(e){}}
+function strike(){makeBolt();ATMO.strikes++;ATMO.flashT=0;if(ATMO.thunder)thunder(0.6+r9()*1.8)}
+// --- dragonflies (daytime): segmented metallic abdomen, big compound eyes, 4 veined see-through wings that flap
+let WING_TEX=null;
+function wingTexture(){return noiseTex(256,(x,s)=>{x.clearRect(0,0,s,s);x.fillStyle='rgba(225,235,240,.28)';x.fillRect(0,0,s,s);x.strokeStyle='rgba(60,70,70,.55)';
+ for(let k=0;k<7;k++){x.lineWidth=k<2?2.2:1;x.beginPath();x.moveTo(0,s*(0.3+k*0.07));x.bezierCurveTo(s*.3,s*(0.26+k*0.075),s*.7,s*(0.3+k*0.06),s,s*(0.42+k*0.02));x.stroke()}
+ x.lineWidth=0.8;for(let i=0;i<34;i++){const u=i/34*s;x.beginPath();x.moveTo(u,s*.2);x.lineTo(u+s*.02,s*.85);x.stroke()}
+ x.fillStyle='rgba(40,30,20,.85)';x.fillRect(s*.8,s*.36,s*.07,s*.06)})}   // pterostigma
+function buildDragonfly(body,eye){const g=new THREE.Group();g.name='Dragonfly';
+ const ab=[];for(let i=0;i<=30;i++){const t=i/30;ab.push(new THREE.Vector2((0.012*(1-0.45*t)+0.0022*Math.abs(Math.sin(t*Math.PI*9)))*(t>0.96?(1-t)*25:1)+0.0005,-t*0.3))}
+ const ag=new THREE.LatheGeometry(ab,12);ag.rotateX(Math.PI/2);const ap=ag.attributes.position,ac=[],bc=col(body),dk=col('#1a1d16');
+ for(let i=0;i<ap.count;i++){const t=-ap.getZ(i)/0.3;const j=Math.abs(Math.sin(t*Math.PI*9));const c=j<0.25?dk:(ap.getY(i)<-0.004?bc.clone().lerp(dk,0.5):bc);ac.push(c.r,c.g,c.b)}
+ ag.setAttribute('color',new THREE.Float32BufferAttribute(ac,3));
+ const bodyM=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.28,metalness:0.55,envMapIntensity:1.6});
+ const abd=new THREE.Mesh(ag,bodyM);abd.position.z=-0.03;g.add(abd);
+ const thM=new THREE.MeshStandardMaterial({color:body,roughness:0.35,metalness:0.45});
+ const th=new THREE.Mesh(new THREE.SphereGeometry(0.026,18,12),thM);th.scale.set(1,1,1.45);g.add(th);
+ const hd=new THREE.Mesh(new THREE.SphereGeometry(0.019,16,12),thM);hd.position.z=0.045;g.add(hd);
+ const eM=new THREE.MeshPhysicalMaterial({color:eye,roughness:0.15,metalness:0.2,clearcoat:1});
+ for(const s of [1,-1]){const e=new THREE.Mesh(new THREE.SphereGeometry(0.016,16,12),eM);e.position.set(0.013*s,0.006,0.05);g.add(e)}
+ const legM=new THREE.MeshStandardMaterial({color:0x1d1f18,roughness:0.6});
+ for(const s of [1,-1])for(let k=0;k<3;k++){const l=new THREE.Mesh(new THREE.CylinderGeometry(0.0016,0.0012,0.034,5),legM);l.position.set(0.012*s,-0.024,0.02-k*0.016);l.rotation.set(0.5,0,0.5*s);g.add(l)}
+ if(!WING_TEX)WING_TEX=wingTexture();
+ const wM=new THREE.MeshStandardMaterial({map:WING_TEX,transparent:true,side:THREE.DoubleSide,depthWrite:false,roughness:0.15,metalness:0.2,envMapIntensity:2});
+ const sh=new THREE.Shape();sh.moveTo(0,0);sh.bezierCurveTo(0.04,0.014,0.18,0.03,0.225,0.012);sh.bezierCurveTo(0.235,0,0.2,-0.017,0.15,-0.015);sh.bezierCurveTo(0.08,-0.013,0.03,-0.012,0,0);
+ const wings=[];
+ for(const [z,wk,ph] of [[0.012,1,0],[-0.016,1.28,1.6]])for(const s of [1,-1]){const wg=new THREE.ShapeGeometry(sh,12);const uv=wg.attributes.uv,wp=wg.attributes.position;
+   for(let i=0;i<wp.count;i++)uv.setXY(i,wp.getX(i)/0.235,(wp.getY(i)+0.02)/0.055);wg.rotateX(-Math.PI/2);wg.scale(1,1,wk);
+   const piv=new THREE.Group();piv.position.set(0.008*s,0.018,z);const w=new THREE.Mesh(wg,wM);w.scale.x=s;piv.add(w);g.add(piv);wings.push({piv,s,ph})}
+ g.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=false}});g.scale.setScalar(1.35);
+ return{g,wings,v:new THREE.Vector3(),tgt:new THREE.Vector3(),tT:0,yaw:0,ph:r9()*6}}
+const DFLY=[];
+function buildDragonflies(){const kinds=[['#2f7fd2','#1d3f6a'],['#c8452c','#5a1a12'],['#3f9a52','#1d4a2a']];
+ for(let i=0;i<QMAX.dfly;i++){const [b,e]=kinds[i%3];const d=buildDragonfly(b,e);const a=r9()*6.28,r=2+r9()*10;d.g.position.set(Math.cos(a)*r,0.6+r9(),Math.sin(a)*r);d.g.visible=false;scene.add(d.g);DFLY.push(d)}}
+function dragonflyUpdate(dt,amt){const n=Math.round(amt*QUALITY[ATMO.quality].dfly),F=frog.position;
+ for(let i=0;i<DFLY.length;i++){const d=DFLY[i],P=d.g.position;d.g.visible=i<n;if(!d.g.visible)continue;
+  d.tT-=dt;if(d.tT<=0){const a=r9()*6.28,r=1.5+r9()*12;d.tgt.set(Math.cos(a)*r,0.35+r9()*1.5,Math.sin(a)*r);d.tT=1.2+r9()*3.2}      // dart to a new spot, then hover
+  const fd=P.distanceTo(F);if(fd<1.1){d.tgt.copy(P).add(V9_v.copy(P).sub(F).setY(0.3).normalize().multiplyScalar(2.6));d.tT=1}   // shy of the frog
+  const to=V9_v.copy(d.tgt).sub(P),dist=to.length();const want=to.normalize().multiplyScalar(Math.min(3.2,dist*3));d.v.lerp(want,Math.min(1,dt*5));
+  P.addScaledVector(d.v,dt);P.y+=Math.sin(V9.t*6+d.ph)*0.004;if(P.y<WY+0.25)P.y=WY+0.25;
+  if(d.v.lengthSq()>0.04){let dy=Math.atan2(d.v.x,d.v.z)-d.yaw;dy=Math.atan2(Math.sin(dy),Math.cos(dy));d.yaw+=dy*Math.min(1,dt*8)}
+  d.g.rotation.set(-THREE.MathUtils.clamp(d.v.y*0.25,-0.4,0.4),d.yaw,0,'YXZ');
+  for(const w of d.wings)w.piv.rotation.z=w.s*(0.12+0.6*Math.sin(V9.t*62+w.ph+d.ph))}}
+// --- apply: called every frame from sceneUpdate (works before the frog model has loaded)
+function setTod(t,instant){if(!TOD[t])return;ATMO.tod=t;if(instant)for(const k of TODS)ATMO.wT[k]=k===t?1:0;atmoUI();if(!instant)toast('时段：'+TOD_NAME[t]+'（N）')}
+function setWeather(w,instant){if(!WX[w])return;ATMO.wx=w;if(instant)for(const k of WXS)ATMO.wW[k]=k===w?1:0;if(w==='storm')ATMO.nextBolt=Math.min(ATMO.nextBolt,2.5);atmoUI();if(!instant)toast('天气：'+WX_NAME[w]+'（G）')}
+function setQuality(q){if(!QUALITY[q])return;ATMO.quality=q;const Q=QUALITY[q];rain.geometry.setDrawRange(0,Q.rain*2);snow.geometry.setDrawRange(0,Q.snow);ripples.count=Q.rip;const s=$('#quality');if(s)s.value=q}
+function atmoUI(){document.querySelectorAll('#todBtns button').forEach(b=>b.classList.toggle('on',b.dataset.tod===ATMO.tod));document.querySelectorAll('#wxBtns button').forEach(b=>b.classList.toggle('on',b.dataset.wx===ATMO.wx))}
+function bakeEnvMaps(){const es=new THREE.Scene();es.add(ENV_SKY);const U=ENV_SKY.userData.U;ATMO.envMaps={};
+ for(const t of TODS){const P=TOD[t];U.top.value.copy(P.top);U.mid.value.copy(P.mid);U.hor.value.copy(P.hor);U.sd.value.copy(P.sun);U.sunCol.value.copy(P.sunCol);U.sunAmt.value=P.sunAmt;U.moonGlow.value=P.moon;
+  ENV_SKY.userData.moon.material.opacity=P.moon;ENV_SKY.userData.moon.visible=P.moon>0.05;ATMO.envMaps[t]=pmrem.fromScene(es,0.02).texture}}
+function atmoUpdate(dt){const A=ATMO,k=Math.min(1,dt/1.6);   // ~2.5 s cross-fade
+ for(const t of TODS)A.wT[t]+=((t===A.tod?1:0)-A.wT[t])*k;for(const w of WXS)A.wW[w]+=((w===A.wx?1:0)-A.wW[w])*k;
+ const WT=A.wT,WW=A.wW,U=sky.userData.U,o=A.out;
+ const cloud=blendN(WX,WW,'cloud'),desat=blendN(WX,WW,'desat'),dark=blendN(WX,WW,'dark'),fogK=blendN(WX,WW,'fogK'),fogGrey=blendN(WX,WW,'fogGrey'),rainA=blendN(WX,WW,'rain'),snowA=blendN(WX,WW,'snow'),boltA=blendN(WX,WW,'bolt');
+ // lightning flash envelope (double flicker)
+ if(boltA>0.5){A.nextBolt-=dt;if(A.nextBolt<=0){strike();A.nextBolt=4+r9()*7}}
+ if(A.flashT!==undefined&&A.flashT!==null){A.flashT+=dt;const f=A.flashT;A.flash=f<0.08?1:f<0.16?0.25:f<0.24?0.85:Math.max(0,0.85*(1-(f-0.24)/0.35));bolt.material.opacity=f<0.3?(f<0.08||(f>0.16&&f<0.24)?1:0.4):0;if(f>0.6){A.flashT=null;A.flash=0;bolt.material.opacity=0}}
+ bolt.visible=bolt.material.opacity>0;
+ // sky
+ wxShade(blendC(U.top.value,TOD,WT,'top'),desat,dark);wxShade(blendC(U.mid.value,TOD,WT,'mid'),desat,dark);wxShade(blendC(U.hor.value,TOD,WT,'hor'),desat,dark);
+ blendC(U.sunCol.value,TOD,WT,'sunCol');U.sunAmt.value=blendN(TOD,WT,'sunAmt')*(1-cloud*0.9);U.sd.value.set(0,0,0);for(const t of TODS)U.sd.value.addScaledVector(TOD[t].sun,WT[t]);U.sd.value.normalize();
+ const moonV=blendN(TOD,WT,'moon')*(1-cloud*0.92);U.moonGlow.value=moonV;sky.userData.moon.material.opacity=moonV;sky.userData.moon.visible=moonV>0.02;MOON_GLOW.material.opacity=0.8*moonV;MOON_GLOW.visible=moonV>0.02;
+ STARS.material.opacity=0.9*blendN(TOD,WT,'stars')*(1-cloud);STARS.visible=STARS.material.opacity>0.01;
+ U.cloud.value=cloud;wxShade(blendC(U.cloudCol.value,TOD,WT,'cloudCol'),desat*0.3,dark);U.flash.value=A.flash*0.55;U.uT.value=V9.t;
+ // lights: key follows sun by day, moon by night
+ KEY_DIR.set(0,0,0);KEY_DIR.addScaledVector(TOD.day.sun,WT.day).addScaledVector(TOD.dusk.sun,WT.dusk).addScaledVector(MOON_DIR,WT.night).normalize();
+ blendC(key.color,TOD,WT,'key');key.intensity=blendN(TOD,WT,'keyI')*blendN(WX,WW,'keyK');
+ wxShade(blendC(hemi.color,TOD,WT,'hs'),desat*0.6,1);blendC(hemi.groundColor,TOD,WT,'hg');hemi.intensity=blendN(TOD,WT,'hI')*(0.75+0.25*dark)+A.flash*2.2;
+ blendC(fill.color,TOD,WT,'fill');fill.intensity=blendN(TOD,WT,'fillI')*(0.7+0.3*dark);bounce.intensity=blendN(TOD,WT,'bounceI');
+ const rimC=blendC(_c2,TOD,WT,'rim').multiplyScalar(blendN(TOD,WT,'rimK'));for(const u of RIM.uniforms){if(!u.base)u.base=u.value.clone().multiply(new THREE.Color(1/RIM.color.r,1/RIM.color.g,1/RIM.color.b));u.value.copy(u.base).multiply(rimC)}
+ // fog / water / shore
+ wxShade(blendC(o.fogC,TOD,WT,'fog'),fogGrey,1);if(fogGrey>0.3)o.fogC.lerp(_c.copy(U.hor.value),0.35);o.fogD=blendN(TOD,WT,'fogD')*fogK;
+ blendC(o.underC,TOD,WT,'under').multiplyScalar(0.75+0.25*dark);o.underD=blendN(TOD,WT,'underD');o.exp=blendN(TOD,WT,'exp');
+ wxShade(blendC(waterMat.color,TOD,WT,'water'),desat*0.4,1);const wave=blendN(WX,WW,'wave');waterMat.normalScale.set(wave,wave);
+ blendC(SHORE.bank.color,TOD,WT,'bank');blendC(SHORE.reed.color,TOD,WT,'reed');blendC(SHORE.tree.color,TOD,WT,'tree');
+ const envT=TODS.reduce((a,t)=>WT[t]>WT[a]?t:a,'night');if(A.envMaps&&A.cur!==envT){scene.environment=A.envMaps[envT];A.cur=envT}
+ scene.environmentIntensity=blendN(TOD,WT,'env')*(1-cloud*0.45)+A.flash*0.6;
+ // particles
+ const camUnder=camera.position.y<WY,Q=QUALITY[A.quality];
+ rainU.uT.value=V9.t;rainU.uCam.value.copy(camera.position);rainU.uOp.value=Math.min(1,rainA)*(IS_MOBILE?0.5:0.42);rain.visible=rainA>0.02&&!camUnder;rain.geometry.setDrawRange(0,Math.round(Q.rain*Math.min(1,rainA/1.6+0.4))*2);
+ ripU.uT.value=V9.t;ripU.uCam.value.copy(camera.position);ripU.uAmt.value=Math.min(1,rainA);ripples.visible=rainA>0.02;
+ snowU.uT.value=V9.t;snowU.uCam.value.copy(camera.position);snowU.uOp.value=Math.min(1,snowA);snowU.uPx.value=renderer.getPixelRatio();snow.visible=snowA>0.02&&!camUnder;
+ const ffA=blendN(TOD,WT,'ff')*blendN(WX,WW,'ffK');fireflies.visible=ffA>0.02;A.ff=ffA;
+ const dfA=blendN(TOD,WT,'dfly')*blendN(WX,WW,'dflyK');A.dfly=dfA;dragonflyUpdate(dt,dfA)}
+function atmoApply(under){const o=ATMO.out;scene.fog.color.copy(under?o.underC:o.fogC);scene.fog.density=under?o.underD:o.fogD;renderer.toneMappingExposure=(under?o.exp*1.19:o.exp)*(1+ATMO.flash*0.35);
+ if(fireflies.visible)fireflies.material.opacity*=ATMO.ff}
+function initAtmo(){bakeEnvMaps();buildDragonflies();setQuality(ATMO.quality);
+ const h=document.createElement('div');h.id='atmoBox';
+ h.innerHTML='<h3>时段（N）</h3><div class="row seg" id="todBtns">'+TODS.map(t=>`<button class="btn sm" data-tod="${t}">${TOD_NAME[t]}</button>`).join('')+'</div>'+
+  '<h3>天气（G）</h3><div class="row seg" id="wxBtns">'+WXS.map(w=>`<button class="btn sm" data-wx="${w}">${WX_NAME[w]}</button>`).join('')+'</div>'+
+  '<div class="row"><label class="tog"><input type="checkbox" id="thunderOn">雷雨时播放雷声</label><label class="tog">粒子画质 <select id="quality"><option value="low">低（手机）</option><option value="high">高</option></select></label></div>';
+ const anchor=$('#vestOn').closest('.row');anchor.after(h);
+ h.querySelectorAll('#todBtns button').forEach(b=>b.onclick=()=>setTod(b.dataset.tod));h.querySelectorAll('#wxBtns button').forEach(b=>b.onclick=()=>setWeather(b.dataset.wx));
+ $('#thunderOn').onchange=e=>{ATMO.thunder=e.target.checked;if(ATMO.thunder)thunder(0.05)};$('#quality').value=ATMO.quality;$('#quality').onchange=e=>setQuality(e.target.value);
+ addEventListener('keydown',e=>{if(TYPING()||e.repeat||e.ctrlKey||e.metaKey)return;const k=e.key.toLowerCase();
+  if(k==='n')setTod(TODS[(TODS.indexOf(ATMO.tod)+1)%3]);else if(k==='g')setWeather(WXS[(WXS.indexOf(ATMO.wx)+1)%WXS.length])});
+ const q=new URLSearchParams(location.search);if(q.get('tod'))setTod(q.get('tod'),true);if(q.get('wx'))setWeather(q.get('wx'),true);if(q.get('q'))setQuality(q.get('q'));atmoUI();atmoUpdate(0)}
+function atmoState(){const U=sky.userData.U;return{tod:ATMO.tod,wx:ATMO.wx,wT:{...ATMO.wT},wW:{...ATMO.wW},quality:ATMO.quality,fogD:ATMO.out.fogD,sceneFog:scene.fog.density,keyI:key.intensity,keyDirY:KEY_DIR.y,
+ skyTop:U.top.value.toArray(),sunAmt:U.sunAmt.value,cloud:U.cloud.value,stars:STARS.material.opacity,moon:sky.userData.moon.visible,ff:fireflies.visible,dfly:DFLY.filter(d=>d.g.visible).length,
+ dflyPos:DFLY.filter(d=>d.g.visible).map(d=>d.g.position.toArray()),rain:rain.visible,rainN:rain.geometry.drawRange.count/2,ripples:ripples.visible,ripN:ripples.count,snow:snow.visible,snowN:snow.geometry.drawRange.count,
+ strikes:ATMO.strikes,flash:ATMO.flash,thunder:ATMO.thunder,water:waterMat.color.toArray(),env:ATMO.cur}}
+// ---------------------------------------------------------------- 5) 手机虚拟按键（触屏）：方向键 + 上浮/起跳 + 下潜，转成同一套键盘事件
+function initTouch(){const touch=IS_MOBILE||matchMedia('(pointer:coarse)').matches;if(!touch)return;document.body.classList.add('touch');
+ const t=document.createElement('div');t.id='touch';
+ t.innerHTML='<div id="tpad"><button data-k="w" class="u">▲</button><button data-k="a" class="l">◀</button><button data-k="d" class="r">▶</button><button data-k="s" class="d">▼</button></div>'+
+  '<div id="tact"><button data-k=" " title="远跳起跳 / 上浮">⤒<small>跳·浮</small></button><button data-k="e" title="下潜">⤓<small>下潜</small></button></div>';
+ document.body.appendChild(t);
+ const st=document.createElement('style');st.textContent=`#touch{display:none}body.touch #touch{display:block}body.touch:not(.nopanel) #touch{display:none}
+#tpad,#tact{position:fixed;bottom:calc(18px + env(safe-area-inset-bottom));z-index:9;touch-action:none;user-select:none;-webkit-user-select:none}
+#tpad{left:14px;width:150px;height:150px}#tact{right:14px;display:flex;flex-direction:column;gap:12px}
+#touch button{border:1px solid #9fc4ff66;background:rgba(10,22,40,.6);color:#e8f1ff;font-size:22px;border-radius:16px;touch-action:none;font-family:inherit;padding:0}
+#touch button.on{background:rgba(127,174,58,.85)}#tpad button{position:absolute;width:52px;height:52px}
+#tpad .u{left:49px;top:0}#tpad .d{left:49px;bottom:0}#tpad .l{left:0;top:49px}#tpad .r{right:0;top:49px}
+body.touch #hudHint,body.touch #hudCommon{display:none}.hud{max-height:none}
+#tact button{width:64px;height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}#tact small{font-size:10px;margin-top:3px}`;document.head.appendChild(st);
+ const send=(k,down)=>dispatchEvent(new KeyboardEvent(down?'keydown':'keyup',{key:k}));
+ t.querySelectorAll('button').forEach(b=>{const k=b.dataset.k;
+  b.addEventListener('pointerdown',e=>{e.preventDefault();b.setPointerCapture(e.pointerId);b.classList.add('on');send(k,true)});
+  const up=()=>{if(!b.classList.contains('on'))return;b.classList.remove('on');send(k,false)};b.addEventListener('pointerup',up);b.addEventListener('pointercancel',up);b.addEventListener('lostpointercapture',up)})}
+initTouch();
 // ---------------------------------------------------------------- init / update / keys / UI
 function initV9(){attachHeadlamp();buildFish();buildTurtles();buildMinimap();
  const row=document.createElement('div');row.className='row';row.innerHTML='<label class="tog"><input type="checkbox" id="lampOn">头灯（L）</label><label class="tog"><input type="checkbox" id="mmOn">小地图（M）</label>';
@@ -710,10 +919,11 @@ function initV9(){attachHeadlamp();buildFish();buildTurtles();buildMinimap();
  const lb=document.createElement('button');lb.id='lampBtn';lb.textContent='🔦 头灯';lb.onclick=()=>setLamp(!V9.lampOn);$('#hud .modes').appendChild(lb);
  addEventListener('keydown',e=>{if(TYPING()||e.repeat)return;const k=e.key.toLowerCase();if(k==='l')setLamp(!V9.lampOn);else if(k==='m')toggleMinimap()});
  V9.ready=true}
-function v9Update(dt){if(!V9.ready)return;V9.t+=dt;
+initAtmo();
+function v9Update(dt){V9.t+=dt;atmoUpdate(dt);if(!V9.ready)return;
  if(V9.lamp){const under=frog.position.y<WY-0.15;const want=V9.lampOn?(under?9:6):0;V9.spot.intensity+=(want-V9.spot.intensity)*Math.min(1,dt*10);V9.beamMat.uniforms.uI.value=V9.lampOn?(under?0.5:0.28):0;
   $('#lampBtn').classList.toggle('on',V9.lampOn)}
- fishUpdate(dt);turtleUpdate(dt);drawMinimap()}
+ fishUpdate(dt);turtleUpdate(dt);V9.mmT=(V9.mmT||0)-dt;if(V9.mmT<=0){V9.mmT=0.5;placeMinimap()}drawMinimap()}
 function v9State(){const L=V9.lamp;const wp=new THREE.Vector3();if(L)L.getWorldPosition(wp);const mmEl=$('#mm');const rect=mmEl&&V9.mm.on?mmEl.getBoundingClientRect():null;
  return{mobile:IS_MOBILE,lamp:{on:V9.lampOn,intensity:V9.spot?V9.spot.intensity:0,parent:L&&L.parent?L.parent.name:null,pos:[wp.x,wp.y,wp.z],beam:V9.beam?V9.beam.visible:false,meshes:L?L.children.filter(o=>o.isMesh).length:0},
   minimap:{on:V9.mm.on,zoom:V9.mm.zoom,frogPx:V9.mm.frogPx||null,rect:rect?[rect.left,rect.top,rect.right,rect.bottom]:null},
@@ -795,7 +1005,7 @@ function tick(){requestAnimationFrame(tick);const dt=Math.min(clock.getDelta(),0
  }
  controls.update();renderer.render(scene,camera)}
 tick();
-window.__pond={v9:()=>v9State(),setLamp:on=>setLamp(on,true),toggleMinimap:on=>toggleMinimap(on,true),setZoom,state:()=>({mode:CTRL.mode,where:CTRL.where,x:frog.position.x,y:frog.position.y,z:frog.position.z,yaw:CTRL.yaw,jumping:!!CTRL.jump,jumpKind:CTRL.jump?CTRL.jump.kind:null,anim:cur?cur.getClip().name:null,
+window.__pond={v9:()=>v9State(),atmo:()=>atmoState(),setTod:t=>setTod(t,true),setWeather:w=>setWeather(w,true),setQuality,strike,setLamp:on=>setLamp(on,true),toggleMinimap:on=>toggleMinimap(on,true),setZoom,state:()=>({mode:CTRL.mode,where:CTRL.where,x:frog.position.x,y:frog.position.y,z:frog.position.z,yaw:CTRL.yaw,jumping:!!CTRL.jump,jumpKind:CTRL.jump?CTRL.jump.kind:null,anim:cur?cur.getClip().name:null,
   animTime:cur?cur.time:0,target:[CTRL.target.x,CTRL.target.z],valid:CTRL.tvalid,reason:CTRL.treason,pad:CTRL.pad?PADS.indexOf(CTRL.pad):-1,padOff:CTRL.pad?CTRL.pad.off:0,under:camera.position.y<WY,log:CTRL.log.slice(),pads:PADS.length,preview:pathLine.visible,fog:scene.fog.density}),
  setMode,setTarget:(x,z)=>CTRL.target.set(x,0,z),placeWater:(x,z,yaw)=>{CTRL.jump=null;CTRL.where='water';CTRL.pad=null;CTRL.yaw=yaw;CTRL.vy=0;CTRL.spd=0;frog.position.set(x,SWIM_SURF,z);CTRL.lastFrog.copy(frog.position);resetView();setMode(3,true);play('swim',0)},pauseAt:t=>{CTRL.pauseAt=t},resume:()=>{CTRL.paused=false},reset:resetFrog,padInfo:i=>({x:PADS[i].x,z:PADS[i].z,r:PADS[i].r}),
  camLook:(dx,dy,dz,tx,ty,tz,fov)=>{camera.fov=fov||camera.fov;camera.updateProjectionMatrix();camera.position.set(frog.position.x+dx,frog.position.y+dy,frog.position.z+dz);controls.target.set(frog.position.x+tx,frog.position.y+ty,frog.position.z+tz);controls.update()},
