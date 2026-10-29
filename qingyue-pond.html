@@ -109,9 +109,12 @@ import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 const $=s=>document.querySelector(s);
 const toast=(t,ms=2200)=>{const e=$('#toast');e.textContent=t;e.style.opacity=1;clearTimeout(e._t);e._t=setTimeout(()=>e.style.opacity=0,ms)};
 // ---------- v8 renderer / night pond scene
+const IS_MOBILE=matchMedia('(max-width:760px)').matches||('ontouchstart' in window&&innerWidth<900);
+const V10={events:{jump:0,land:0,splash:0,stroke:0,turtleDive:0,bubble:0,swish:0,thunder:0,frogFar:0,bird:0,cricket:0,cicada:0},hint:{on:true,last:'',lastT:-99,cool:{}},lastThunder:null,flashHold:false,forceBolt:false};
 const canvas=$('#c');
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true,preserveDrawingBuffer:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
@@ -139,10 +142,11 @@ const MOON_DIR=new THREE.Vector3(-0.42,0.52,-0.74).normalize();let STARS,MOON_GL
 // v9: sky colours / sun / clouds / lightning flash are uniforms driven by the time-of-day + weather system (defaults = the v8 night)
 function makeSky(){const g=new THREE.Group();
  const U={md:{value:MOON_DIR},top:{value:new THREE.Color(.012,.025,.07)},mid:{value:new THREE.Color(.03,.07,.16)},hor:{value:new THREE.Color(.07,.13,.20)},
-  moonGlow:{value:1},sd:{value:new THREE.Vector3(0.5,0.6,-0.6).normalize()},sunCol:{value:new THREE.Color(1,.95,.8)},sunAmt:{value:0},cloud:{value:0},cloudCol:{value:new THREE.Color(.1,.12,.16)},flash:{value:0},uT:{value:0}};
+  moonGlow:{value:1},sd:{value:new THREE.Vector3(0.5,0.6,-0.6).normalize()},sunCol:{value:new THREE.Color(1,.95,.8)},sunAmt:{value:0},cloud:{value:0},cloudCol:{value:new THREE.Color(.1,.12,.16)},flash:{value:0},uT:{value:0},
+  fogC:{value:new THREE.Color()},fogAmt:{value:0}};
  const dome=new THREE.Mesh(new THREE.SphereGeometry(180,48,24),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:false,uniforms:U,
   vertexShader:'varying vec3 vp;void main(){vp=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-  fragmentShader:`uniform vec3 md,top,mid,hor,sd,sunCol,cloudCol;uniform float moonGlow,sunAmt,cloud,flash,uT;varying vec3 vp;
+  fragmentShader:`uniform vec3 md,top,mid,hor,sd,sunCol,cloudCol,fogC;uniform float moonGlow,sunAmt,cloud,flash,uT,fogAmt;varying vec3 vp;
    float h2(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
    float n2(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h2(i),h2(i+vec2(1,0)),f.x),mix(h2(i+vec2(0,1)),h2(i+vec2(1,1)),f.x),f.y);}
    float fbm(vec2 p){float v=0.,a=.5;for(int k=0;k<5;k++){v+=a*n2(p);p*=2.03;a*=.5;}return v;}
@@ -151,7 +155,8 @@ function makeSky(){const g=new THREE.Group();
    float s=max(dot(vp,sd),0.);c+=sunCol*(pow(s,900.)*6.+pow(s,60.)*.5+pow(s,6.)*.18)*sunAmt;
    if(cloud>0.001&&h>-.02){vec2 q=vp.xz/(h+.18)*1.6+vec2(uT*.012,uT*.006);float f=fbm(q);float cov=smoothstep(1.-cloud*1.05,1.15-cloud*.55,f+cloud*.35);
     vec3 cc=cloudCol*(.75+.5*f)+sunCol*pow(s,8.)*.25*sunAmt;c=mix(c,cc,cov*smoothstep(-.02,.12,h));}
-   if(h<0.)c=mix(hor,vec3(.01,.02,.03)*(1.+sunAmt*6.),smoothstep(0.,-.2,h));
+   c=mix(c,fogC,fogAmt*(1.-smoothstep(-.05,.3+.5*fogAmt*fogAmt,h)));
+   if(h<0.)c=mix(c,vec3(.01,.02,.03)*(1.+sunAmt*6.)*(1.-fogAmt)+fogC*fogAmt,smoothstep(0.,-.2,h));
    c+=vec3(.75,.8,1.)*flash;gl_FragColor=vec4(c,1.);}`}));g.add(dome);
  const moon=new THREE.Mesh(new THREE.SphereGeometry(5,32,16),new THREE.MeshBasicMaterial({color:0xf4f1de,fog:false,transparent:true}));moon.position.copy(MOON_DIR).multiplyScalar(160);g.add(moon);
  g.userData={U,moon};return g}
@@ -225,12 +230,72 @@ function makeLotus(pad){const g=new THREE.Group();const pm=new THREE.MeshStandar
  const ox=(rnd()-.5)*pad.r*0.6,oz=(rnd()-.5)*pad.r*0.6;g.position.set(ox,0.01,oz);g.traverse(o=>{if(o.isMesh)o.castShadow=true});pad.grp.add(g);pad.flower={x:ox,z:oz};
  OBST.push({pad,ox,oz,r:0.36,h:0.5})}
 PADS.filter((p,i)=>i>10&&p.r>0.9).slice(0,9).forEach(makeLotus);
-// shore: dark bank ring, reeds, distant tree silhouettes
-const SHORE={};
+// shore (v10): dark bank ring + pond-side plants, all instanced and low poly (one draw call per part): reeds with plumes, cattails, bank shrubs,
+// weeping willows leaning over the water and groves of dawn redwoods (水杉). Replaces the v8 cone silhouettes; tinted per time of day, swaying in the wind.
+const SHORE={reedMats:[],treeMats:[]};
+const r10=(()=>{let s=1010;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296}})();
+const PLANT_SWAY={value:0},PLANT_WIND={value:0.3};
+function swayMat(mat,code,attr=''){mat.onBeforeCompile=sh=>{sh.uniforms.uT=PLANT_SWAY;sh.uniforms.uWind=PLANT_WIND;sh.vertexShader='uniform float uT;uniform float uWind;\n'+attr+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\n'+code)};return mat}
+function vcol(g,fn){const p=g.attributes.position,c=new Float32Array(p.count*3);for(let i=0;i<p.count;i++){const v=fn(p.getX(i),p.getY(i),p.getZ(i));c[i*3]=v[0];c[i*3+1]=v[1];c[i*3+2]=v[2]}g.setAttribute('color',new THREE.BufferAttribute(c,3));return g}
+const mixc=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
+function jitter(g,amt,rng){const p=g.attributes.position;const key=new Map();for(let i=0;i<p.count;i++){const k=p.getX(i).toFixed(3)+','+p.getY(i).toFixed(3)+','+p.getZ(i).toFixed(3);if(!key.has(k))key.set(k,[(rng()-.5)*amt,(rng()-.5)*amt*0.6,(rng()-.5)*amt]);const d=key.get(k);p.setXYZ(i,p.getX(i)+d[0],p.getY(i)+d[1],p.getZ(i)+d[2])}g.computeVertexNormals();return g}
+function inst(geo,mat,list,name,colorFn){const m=new THREE.InstancedMesh(geo,mat,list.length);m.name=name;const M=new THREE.Matrix4(),q=new THREE.Quaternion(),e=new THREE.Euler();
+ list.forEach((o,i)=>{e.set(o.rx||0,o.ry||0,o.rz||0);q.setFromEuler(e);M.compose(new THREE.Vector3(o.x,o.y,o.z),q,new THREE.Vector3(o.sx||o.s||1,o.sy||o.s||1,o.sz||o.s||1));m.setMatrixAt(i,M);if(colorFn)m.setColorAt(i,colorFn(o))});
+ m.castShadow=false;m.receiveShadow=false;scene.add(m);return m}
 {const bank=new THREE.Mesh(new THREE.RingGeometry(POND_R+1,POND_R+60,96,1),SHORE.bank=new THREE.MeshStandardMaterial({color:0x0e1a10,roughness:1}));bank.rotation.x=-Math.PI/2;bank.position.y=WY+0.05;scene.add(bank);
- const n=520,geo=new THREE.ConeGeometry(0.03,1,4);geo.translate(0,0.5,0);const m=new THREE.InstancedMesh(geo,SHORE.reed=new THREE.MeshStandardMaterial({color:0x2c3d22,roughness:0.9}),n);const M=new THREE.Matrix4(),q=new THREE.Quaternion();
- for(let i=0;i<n;i++){const a=rnd()*6.283,r=POND_R-1.5+rnd()*4,h=1.2+rnd()*2.4;q.setFromEuler(new THREE.Euler((rnd()-.5)*0.25,0,(rnd()-.5)*0.25));M.compose(new THREE.Vector3(Math.cos(a)*r,WY-0.2,Math.sin(a)*r),q,new THREE.Vector3(1,h,1));m.setMatrixAt(i,M)}scene.add(m);
- const tm=SHORE.tree=new THREE.MeshStandardMaterial({color:0x07110b,roughness:1});for(let i=0;i<46;i++){const a=rnd()*6.283,r=POND_R+12+rnd()*22,h=6+rnd()*9;const t=new THREE.Mesh(new THREE.ConeGeometry(1.6+rnd()*2.2,h,7),tm);t.position.set(Math.cos(a)*r,WY+h/2,Math.sin(a)*r);scene.add(t)}}
+ for(let i=0;i<520*5+46*4;i++)rnd();   // keep the shared layout RNG where v8 left it (fireflies etc. stay put)
+ const LOW=IS_MOBILE,merge=BufferGeometryUtils.mergeGeometries;
+ // --- reeds: two crossed tapered blades bending at the tip; plumes (芦苇花穗) and cattail heads (香蒲) ride on the swaying tips
+ const blade=rot=>{const P=[],I=[];const rows=[0,0.3,0.6,0.85,1];rows.forEach((y,j)=>{const w=0.03*(1-y)+0.003,x=0.08*y*y;P.push(x-w,y,0,x+w,y,0);if(j){const k=(j-1)*2;I.push(k,k+1,k+2,k+1,k+3,k+2)}});
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setIndex(I);g.rotateY(rot);return g};
+ const reedG=vcol(merge([blade(0),blade(1.7)]),(x,y)=>mixc([0.17,0.24,0.1],[0.46,0.52,0.24],y));reedG.computeVertexNormals();
+ const SW='float ph=instanceMatrix[3][0]*0.9+instanceMatrix[3][2]*1.1;float wv=0.08+0.22*uWind;';
+ const reedMat=SHORE.reed=swayMat(new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.85,side:THREE.DoubleSide,envMapIntensity:0.4}),SW+'float k=position.y*position.y;transformed.x+=sin(uT*1.6+ph)*wv*k;transformed.z+=cos(uT*1.3+ph)*wv*0.6*k;');
+ const headMat=swayMat(new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.9,envMapIntensity:0.3}),SW+'transformed.x+=sin(uT*1.6+ph)*wv;transformed.z+=cos(uT*1.3+ph)*wv*0.6;');
+ SHORE.reedMats.push(reedMat,headMat);
+ const reeds=[],plumes=[],cats=[];const NR=LOW?380:760;
+ for(let c=0;reeds.length<NR;c++){const a=r10()*6.283,r=POND_R-1.3+r10()*3.8,cx=Math.cos(a)*r,cz=Math.sin(a)*r,kind=r10();
+  for(let i=0;i<8+(r10()*8|0)&&reeds.length<NR;i++){const x=cx+(r10()-.5)*1.4,z=cz+(r10()-.5)*1.4,h=1.3+r10()*1.8,ry=r10()*6.283;reeds.push({x,y:WY-0.2,z,ry,sx:1,sy:h,sz:1,g:0.85+r10()*0.3});
+   const top={x:x+0.08*Math.cos(ry),y:WY-0.2+h,z:z-0.08*Math.sin(ry),ry,s:0.8+r10()*0.5};if(kind<0.55&&r10()<0.45)plumes.push(top);else if(kind>0.8&&r10()<0.4)cats.push(top)}}
+ inst(reedG,reedMat,reeds,'Reeds',o=>new THREE.Color(o.g,o.g,o.g*0.95));
+ const plumeG=vcol(new THREE.SphereGeometry(1,6,6).scale(0.05,0.24,0.05).translate(0.02,0.16,0),(x,y)=>mixc([0.62,0.52,0.36],[0.86,0.78,0.6],(y-0.0)/0.4));plumeG.computeVertexNormals();
+ inst(plumeG,headMat,plumes,'ReedPlumes');
+ const catG=vcol(merge([new THREE.CylinderGeometry(0.03,0.03,0.24,8).translate(0,0.12,0),new THREE.CylinderGeometry(0.005,0.002,0.16,4).translate(0,0.32,0)]),(x,y)=>y>0.25?[0.5,0.45,0.3]:[0.3,0.19,0.1]);
+ inst(catG,headMat,cats,'Cattails');
+ // --- materials for trees / shrubs
+ const barkMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.95,envMapIntensity:0.3});
+ const leafMat=SHORE.tree=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.85,flatShading:true,envMapIntensity:0.35});
+ const strandTex=noiseTex(128,(x,s)=>{x.clearRect(0,0,s,s);for(let i=0;i<14;i++){let px=(i+0.5)/14*s+(r10()-.5)*4;const g=['#7a9a3c','#6a8a30','#8fae4a','#5d7a2a'][i%4];
+   for(let y=0;y<s;y+=3){px+=Math.sin(y*0.08+i)*0.6;x.fillStyle=g;x.beginPath();x.ellipse(px+(y%6?1.6:-1.6),y,1.4,2.6,(y%6?0.5:-0.5),0,7);x.fill()}}});
+ strandTex.wrapS=strandTex.wrapT=THREE.ClampToEdgeWrapping;strandTex.colorSpace=THREE.SRGBColorSpace;
+ const strandMat=swayMat(new THREE.MeshStandardMaterial({map:strandTex,alphaTest:0.45,side:THREE.DoubleSide,roughness:0.8,envMapIntensity:0.3}),
+  'float ph=instanceMatrix[3][0]*0.7+instanceMatrix[3][2]*0.9;float k=hang*hang;transformed.x+=sin(uT*0.9+ph+position.y*0.5)*(0.1+0.3*uWind)*k;transformed.z+=cos(uT*0.7+ph)*(0.08+0.22*uWind)*k;','attribute float hang;\n');
+ SHORE.treeMats.push(barkMat,strandMat);
+ // --- weeping willows (柳树): bent trunk leaning over the water, low dome, curtain of hanging strands
+ const wTrunk=vcol(new THREE.CylinderGeometry(0.15,0.36,4.4,7,6).translate(0,2.2,0),(x,y)=>mixc([0.2,0.16,0.12],[0.3,0.25,0.18],y/4.4));
+ {const p=wTrunk.attributes.position;for(let i=0;i<p.count;i++){const t=p.getY(i)/4.4;p.setX(i,p.getX(i)+0.8*t*t)}wTrunk.computeVertexNormals()}
+ const wDome=vcol(jitter(new THREE.SphereGeometry(1,12,8,0,Math.PI*2,0,Math.PI*0.56).scale(1.9,1.6,1.9).translate(0.8,4.3,0),0.3,r10),(x,y)=>mixc([0.28,0.4,0.13],[0.52,0.64,0.25],THREE.MathUtils.clamp((y-4)/1.8,0,1)));
+ const strands=[];for(const [NS,rr0,L0,top0] of [[26,1.75,3.3,4.5],[12,1.05,2.6,4.9]])for(let i=0;i<NS;i++){const f=i/NS*6.283+r10()*0.12,rr=rr0*(0.9+r10()*0.12),L=L0*(0.85+r10()*0.3)+(Math.cos(f)>0?0.35:0),top=top0+r10()*0.2;
+  const g=new THREE.PlaneGeometry(0.8,L,1,6).translate(0,-L/2,0);const hang=new Float32Array(g.attributes.position.count);for(let k=0;k<hang.length;k++)hang[k]=-g.attributes.position.getY(k)/L;g.setAttribute('hang',new THREE.BufferAttribute(hang,1));
+  {const pp=g.attributes.position;for(let k=0;k<pp.count;k++){const u=hang[k];pp.setZ(k,pp.getZ(k)+0.35*Math.sin(u*Math.PI*0.8))}}   // strands bow outward a little, then fall straight
+  g.rotateY(-f+Math.PI/2);g.translate(0.8+Math.cos(f)*rr,top,Math.sin(f)*rr);strands.push(g)}
+ const wCurtain=merge(strands);
+ const willows=[];const NW=LOW?7:12;for(let i=0;i<NW;i++){const a=i/NW*6.283+(r10()-.5)*0.35,r=POND_R+2.4+r10()*3.2;willows.push({x:Math.cos(a)*r,y:WY,z:Math.sin(a)*r,ry:Math.PI-a,s:0.9+r10()*0.4,g:0.85+r10()*0.3})}
+ inst(wTrunk,barkMat,willows,'WillowTrunks');inst(wDome,leafMat,willows,'WillowCrowns',o=>new THREE.Color(o.g,o.g,o.g*0.9));inst(wCurtain,strandMat,willows,'WillowStrands',o=>new THREE.Color(o.g,o.g,o.g*0.92));
+ // --- dawn redwoods (水杉): straight tapering trunk, narrow cone of feathery tiers
+ const mTrunk=vcol(new THREE.CylinderGeometry(0.09,0.34,11.5,6,1).translate(0,5.75,0),(x,y)=>mixc([0.3,0.18,0.12],[0.36,0.24,0.16],y/11.5));
+ const tiers=[];for(let k=0;k<9;k++){const r=0.35+2.0*Math.pow(1-k/9,1.1),h=1.8;tiers.push(new THREE.ConeGeometry(r,h,9,1,false).translate(0,2.4+k*1.12+h/2,0))}tiers.push(new THREE.ConeGeometry(0.25,1.4,6).translate(0,2.4+9*1.12+0.7,0));
+ const mLeaf=vcol(jitter(merge(tiers.map(g=>g.toNonIndexed())),0.35,r10),(x,y,z)=>{const rr=Math.hypot(x,z);return mixc([0.12,0.24,0.1],[0.3,0.5,0.22],THREE.MathUtils.clamp(rr/1.6+(y-2)/30,0,1))});
+ const meta=[];const NM=LOW?14:26;let tries=0;
+ while(meta.length<NM&&tries<400){tries++;const ga=r10()*6.283,gr=POND_R+10+r10()*20;const n=2+(r10()*5|0);
+  for(let j=0;j<n&&meta.length<NM;j++){const x=Math.cos(ga)*gr+(r10()-.5)*7,z=Math.sin(ga)*gr+(r10()-.5)*7;if(Math.hypot(x,z)<POND_R+8)continue;
+   if(meta.some(o=>Math.hypot(o.x-x,o.z-z)<2.6))continue;meta.push({x,y:WY,z,ry:r10()*6.283,s:0.75+r10()*0.55,g:0.8+r10()*0.35,rust:r10()})}}
+ inst(mTrunk,barkMat,meta,'MetasequoiaTrunks');inst(mLeaf,leafMat,meta,'MetasequoiaCrowns',o=>new THREE.Color(o.g*(1+o.rust*0.12),o.g,o.g*0.85));
+ // --- bank shrubs
+ const shrubG=vcol(jitter(new THREE.IcosahedronGeometry(1,1),0.3,r10),(x,y)=>mixc([0.12,0.2,0.08],[0.3,0.42,0.16],(y+1)/2));
+ const shrubs=[];for(let i=0;i<(LOW?40:80);i++){const a=r10()*6.283,r=POND_R+1.6+r10()*8;const s=0.6+r10()*1.1;shrubs.push({x:Math.cos(a)*r,y:WY,z:Math.sin(a)*r,ry:r10()*6,sx:s*(1+r10()*0.5),sy:s*(0.5+r10()*0.4),sz:s*(1+r10()*0.5),g:0.75+r10()*0.4})}
+ inst(shrubG,leafMat,shrubs,'BankShrubs',o=>new THREE.Color(o.g,o.g,o.g*0.9));
+ SHORE.treeMats.push(leafMat);SHORE.counts={reeds:reeds.length,plumes:plumes.length,cattails:cats.length,willows:willows.length,metasequoia:meta.length,shrubs:shrubs.length}}
 // fireflies
 const FF_N=70;const ffGeo=new THREE.BufferGeometry();const ffP=new Float32Array(FF_N*3),ffSeed=[];
 for(let i=0;i<FF_N;i++){const a=rnd()*6.283,r=1.5+rnd()*14;ffSeed.push({x:Math.cos(a)*r,z:Math.sin(a)*r,y:0.3+rnd()*1.6,ph:rnd()*6.28,sp:0.3+rnd()*0.5})}
@@ -239,7 +304,7 @@ const fireflies=new THREE.Points(ffGeo,new THREE.PointsMaterial({map:glowTex,col
 // splash rings
 const RINGS=[];const ringMat=new THREE.MeshBasicMaterial({color:0xcfe6ff,transparent:true,opacity:0.6,side:THREE.DoubleSide,depthWrite:false});
 function splash(x,z,s=1){for(let k=0;k<3;k++){const r=new THREE.Mesh(new THREE.RingGeometry(0.85,1,48),ringMat.clone());r.rotation.x=-Math.PI/2;r.position.set(x,WY+0.01,z);r.scale.setScalar(0.1);r.userData={t:-k*0.18,s};scene.add(r);RINGS.push(r)}}
-function sceneUpdate(dt,t){waterN.offset.x+=dt*0.012;waterN.offset.y+=dt*0.008;SWAY.value=t;
+function sceneUpdate(dt,t){waterN.offset.x+=dt*0.012;waterN.offset.y+=dt*0.008;SWAY.value=t;PLANT_SWAY.value=t;
  for(let i=0;i<FF_N;i++){const f=ffSeed[i];ffP[i*3]=f.x+Math.sin(t*f.sp+f.ph)*0.8;ffP[i*3+1]=f.y+Math.sin(t*f.sp*1.7+f.ph)*0.25;ffP[i*3+2]=f.z+Math.cos(t*f.sp*0.9+f.ph)*0.8}
  ffGeo.attributes.position.needsUpdate=true;fireflies.material.opacity=0.7+0.3*Math.sin(t*3);
  for(const p of PADS){p.v+=(-38*p.off-5*p.v)*dt;p.off+=p.v*dt;p.tvx+=(-30*p.tx-4*p.tvx)*dt;p.tx+=p.tvx*dt;p.tvz+=(-30*p.tz-4*p.tvz)*dt;p.tz+=p.tvz*dt;
@@ -356,7 +421,7 @@ fetch('tts/manifest.json').then(r=>{if(!r.ok)throw new Error('manifest '+r.statu
 function buildLines(){const box=$('#lines');box.innerHTML='';
  const list=TTS.man?TTS.man.lines.filter(l=>['开场','问候','科普'].includes(l.group)):LINES.map(t=>({text:t}));
  list.forEach(l=>{const b=document.createElement('button');b.className='chip';b.textContent=l.text;b.onclick=()=>{$('#say').value=l.text;speak(l.text)};box.appendChild(b)})}
-function ttsCtx(){if(!TTS.ac){TTS.ac=new (window.AudioContext||window.webkitAudioContext)();TTS.an=TTS.ac.createAnalyser();TTS.an.fftSize=1024;TTS.an.connect(TTS.ac.destination)}
+function ttsCtx(){if(!TTS.ac){TTS.ac=audioCtx();TTS.an=TTS.ac.createAnalyser();TTS.an.fftSize=1024;TTS.an.connect(SND.n.voice)}   // v10: shared context, voice bus (master volume / K mute apply)
  if(TTS.ac.state==='suspended')TTS.ac.resume();return TTS.ac}
 async function loadClip(l){if(TTS.buffers[l.id])return;const ac=ttsCtx();
  const [ab,tl]=await Promise.all([fetch('tts/'+l.file).then(r=>{if(!r.ok)throw new Error('mp3 '+r.status);return r.arrayBuffer()}),fetch('tts/'+l.timeline).then(r=>r.ok?r.json():null).catch(()=>null)]);
@@ -393,12 +458,12 @@ let mic=null;$('#micBtn').onclick=async()=>{if(mic){mic.stream.getTracks().forEa
  try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});const ac=new (window.AudioContext||window.webkitAudioContext)();const src=ac.createMediaStreamSource(stream);const an=ac.createAnalyser();an.fftSize=1024;src.connect(an);
   mic={stream,an,buf:new Float32Array(1024),lvl:0};$('#micBtn').classList.add('on');toast('对着麦克风说话，青跃会跟着张嘴')}catch(e){toast('无法打开麦克风（需要 https 或 localhost 并授权）')}};
 // ---------- croak sound
-let AC=null;function ribbit(pitch=1){if(!$('#sound').checked)return;try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();const t0=AC.currentTime;
+let AC=null;function ribbit(pitch=1){if(!$('#sound').checked)return;try{AC=audioCtx();if(!AC)return;const t0=AC.currentTime;
  for(let k=0;k<2;k++){const t=t0+k*0.22;const o=AC.createOscillator();o.type='sawtooth';o.frequency.setValueAtTime(150*pitch,t);o.frequency.linearRampToValueAtTime(110*pitch,t+0.16);
   const am=AC.createOscillator();am.frequency.value=38;const amg=AC.createGain();amg.gain.value=0.5;am.connect(amg);
   const g=AC.createGain();g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(0.35,t+0.02);g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
   const bp=AC.createBiquadFilter();bp.type='bandpass';bp.frequency.value=700*pitch;bp.Q.value=2;amg.connect(g.gain);
-  o.connect(bp).connect(g).connect(AC.destination);o.start(t);am.start(t);o.stop(t+0.2);am.stop(t+0.2)}}catch(e){}}
+  o.connect(bp).connect(g).connect(SND.n.voice);o.start(t);am.start(t);o.stop(t+0.2);am.stop(t+0.2)}}catch(e){}}
 // ---------- pointer / picking
 const ray=new THREE.Raycaster(),ptr=new THREE.Vector2(0,0);let ptrActive=false;const lookTarget=new THREE.Vector3(0,0.68,3);
 canvas.addEventListener('pointermove',e=>{ptr.set(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1);ptrActive=true});
@@ -457,10 +522,10 @@ function startJump(to,kind){const from=frog.position.clone();CTRL.turnGoal=null;
  const dx=to.x-from.x,dz=to.z-from.z;if(Math.hypot(dx,dz)>1e-3)CTRL.yaw=Math.atan2(dx,dz);
  const pad=surfaceAt(to.x,to.z);CTRL.jump={from,to:new THREE.Vector3(to.x,P.ty,to.z),pad,kind,H:P.H,landed:false,leftPad:CTRL.pad};
  if(CTRL.pad&&CTRL.where==='pad'){CTRL.pad.v+=0.35}
- play('jump',0.08);actions.jump.setEffectiveTimeScale(kind==='long'?0.8:kind==='hop'?1.55:1.2);
+ sfx('jump',from);play('jump',0.08);actions.jump.setEffectiveTimeScale(kind==='long'?0.8:kind==='hop'?1.55:1.2);
  CTRL.where='air';showPreview(false);CTRL.log.push(kind);return true}
-function landOnPad(pad,x,z){CTRL.where='pad';CTRL.pad=pad;baseLoop='idle';pad.v-=0.75;pad.tvx+=(x-pad.x)/pad.r*0.9;pad.tvz+=(z-pad.z)/pad.r*0.9;splash(x,z,0.45)}
-function enterWater(x,z){CTRL.where='water';CTRL.pad=null;CTRL.vy=-0.6;CTRL.spd=0;splash(x,z,1.2);setMode(3,true);play('swim',0.2);toast('扑通！落水啦，切换到游泳模式')}
+function landOnPad(pad,x,z){sfx('land',new THREE.Vector3(x,pad.top(),z),'pad');CTRL.where='pad';CTRL.pad=pad;baseLoop='idle';pad.v-=0.75;pad.tvx+=(x-pad.x)/pad.r*0.9;pad.tvz+=(z-pad.z)/pad.r*0.9;splash(x,z,0.45)}
+function enterWater(x,z){sfx('splash',new THREE.Vector3(x,WY,z),1.2);CTRL.where='water';CTRL.pad=null;CTRL.vy=-0.6;CTRL.spd=0;splash(x,z,1.2);setMode(3,true);play('swim',0.2);toast('扑通！落水啦，切换到游泳模式')}
 function jumpUpdate(){const J=CTRL.jump,a=actions.jump;if(!J)return;const ct=a.time;
  if(cur!==a){CTRL.jump=null;if(!J.landed){frog.position.set(J.to.x,J.to.y,J.to.z);J.pad?landOnPad(J.pad,J.to.x,J.to.z):enterWater(J.to.x,J.to.z)}return}   // interrupted: land where it was heading
  const u=smooth((ct-AIR0)/(AIR1-AIR0));
@@ -498,7 +563,7 @@ function controllerUpdate(dt){if(!model||CTRL.paused)return;
   // v10: turn smoothly toward the input direction first (keeps turning after a short tap), hop once facing it
   if(CTRL.mode===1&&FP()){const tr=(KEYS.has('a')||KEYS.has('arrowleft')?1:0)-(KEYS.has('d')||KEYS.has('arrowright')?1:0);if(tr){CTRL.yaw+=tr*2.2*dt;frog.rotation.y=CTRL.yaw}}
   if(CTRL.mode===1&&dir&&!(FP()&&CTRL.turnGoal!=null))CTRL.turnGoal=Math.atan2(dir.x,dir.z);
-  if(CTRL.mode===1&&CTRL.turnGoal!=null){const d=wrapA(CTRL.turnGoal-CTRL.yaw);CTRL.yaw+=Math.sign(d)*Math.min(Math.abs(d),13*dt);frog.rotation.y=CTRL.yaw;
+  if(CTRL.mode===1&&CTRL.turnGoal!=null){const d=wrapA(CTRL.turnGoal-CTRL.yaw);CTRL.yaw+=Math.sign(d)*Math.min(Math.abs(d),9*dt);frog.rotation.y=CTRL.yaw;
    if(Math.abs(d)<0.35){if(dir){const to=frog.position.clone().addScaledVector(fwdOf(CTRL.turnGoal),HOP);if(inPond(to.x,to.z)&&!obstacleAt(to.x,to.z,landY(to.x,to.z)+0.05)){CTRL.turnGoal=null;startJump(to,'hop')}}
     else if(Math.abs(d)<1e-3)CTRL.turnGoal=null}}
   if(CTRL.mode===2){if(dir){CTRL.target.addScaledVector(dir,2.6*dt)}const P=plan(frog.position,CTRL.target,'long');CTRL.tvalid=P.ok;CTRL.treason=P.why;
@@ -594,7 +659,6 @@ function pickTarget(){const hits=ray.intersectObjects([water,...PADS.map(p=>p.gr
 
 $('#hudCommon').textContent=COMMON;$('#hudHint').textContent=HINT[1];$('#panelT').onclick=()=>document.body.classList.toggle('nopanel');
 // ===================== v9: 小地图 · 头灯 · 水下生物 =====================
-const IS_MOBILE=matchMedia('(max-width:760px)').matches||('ontouchstart' in window&&innerWidth<900);
 const V9={lamp:null,lampOn:false,spot:null,beam:null,beamMat:null,lens:null,mm:{on:!IS_MOBILE,zoom:1,cv:null,ctx:null},fishSets:[],turtles:[],t:0};
 const r9=(()=>{let s=909;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296}})();
 const lerp=(a,b,t)=>a+(b-a)*t;
@@ -679,9 +743,9 @@ function fishGeometry(sp){// laterally-compressed body by cross-sections + forke
  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('color',new THREE.Float32BufferAttribute(C,3));
  g.setAttribute('along',new THREE.Float32BufferAttribute(A,1));g.setIndex(I);g.computeVertexNormals();return g}
 const FISH_SPECIES=[
- {name:'鲫鱼',len:0.30,h:0.075,w:0.032,dorsal:0.15,back:[62,72,42],flank:[170,160,108],belly:[226,218,186],fin:[120,110,80],n:IS_MOBILE?6:10,schools:2,speed:0.38,freq:7},
- {name:'麦穗鱼',len:0.15,h:0.026,w:0.017,dorsal:0.05,back:[86,88,74],flank:[160,158,140],belly:[220,214,196],stripe:[48,50,44],fin:[140,132,112],n:IS_MOBILE?12:24,schools:2,speed:0.55,freq:12},
- {name:'鳑鲏',len:0.11,h:0.036,w:0.012,dorsal:0.4,back:[96,90,120],flank:[196,150,178],belly:[236,214,226],stripe:[120,170,190],fin:[200,110,120],n:IS_MOBILE?8:18,schools:2,speed:0.5,freq:13}];
+ {name:'鲫鱼',icon:'#e0c66e',len:0.30,h:0.075,w:0.032,dorsal:0.15,back:[62,72,42],flank:[170,160,108],belly:[226,218,186],fin:[120,110,80],n:IS_MOBILE?6:10,schools:2,speed:0.38,freq:7},
+ {name:'麦穗鱼',icon:'#cfd8de',len:0.15,h:0.026,w:0.017,dorsal:0.05,back:[86,88,74],flank:[160,158,140],belly:[220,214,196],stripe:[48,50,44],fin:[140,132,112],n:IS_MOBILE?12:24,schools:2,speed:0.55,freq:12},
+ {name:'鳑鲏',icon:'#ec9ad6',len:0.11,h:0.036,w:0.012,dorsal:0.4,back:[96,90,120],flank:[196,150,178],belly:[236,214,226],stripe:[120,170,190],fin:[200,110,120],n:IS_MOBILE?8:18,schools:2,speed:0.5,freq:13}];
 function buildFish(){for(const sp of FISH_SPECIES){const geo=fishGeometry(sp);
  const iSwim=new THREE.InstancedBufferAttribute(new Float32Array(sp.n*2),2);for(let i=0;i<sp.n;i++){iSwim.setXY(i,r9()*6.28,0.85+r9()*0.3)}geo.setAttribute('iSwim',iSwim);
  const U={value:0};const mat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.32,metalness:0.25,side:THREE.DoubleSide,envMapIntensity:1.4});
@@ -700,8 +764,8 @@ function fishUpdate(dt){const L=lampInfo(),F=frog.position;
  for(const set of V9.fishSets){set.U.value=V9.t;const sp=set.sp;
   for(const sc of set.schools){sc.tT-=dt;if(sc.tT<=0||sc.c.distanceTo(sc.tgt)<0.5){const a=r9()*6.28,r=1.5+r9()*(POND_R-5);sc.tgt.set(Math.cos(a)*r,lerp(FLOOR_Y+0.4,WY-0.4,r9()),Math.sin(a)*r);sc.tT=8+r9()*8}
    const goal=sc.tgt.clone();if(L&&inBeam(sc.c,L)){goal.copy(L.o).addScaledVector(L.d,1.6)}                     // curious: drift into the lamp beam
-   const fd=sc.c.distanceTo(F);if(fd<2.0){goal.copy(sc.c).add(V9_v.copy(sc.c).sub(F).setY(0).normalize().multiplyScalar(3))}   // school veers away from the frog
-   sc.c.addScaledVector(V9_v.copy(goal).sub(sc.c).normalize(),sp.speed*0.55*dt*(fd<2?2.2:1));clampWater(sc.c,0.35)}
+   const fd=sc.c.distanceTo(F);if(fd<2.0&&!sc.flee&&V9.t-(sc.swT??-9)>2.5){sfx('swish',sc.c);sc.swT=V9.t}sc.flee=fd<2.0||(sc.flee&&fd<2.8);if(fd<2.0){goal.copy(sc.c).add(V9_v.copy(sc.c).sub(F).setY(0).normalize().multiplyScalar(3))}   // school veers away from the frog
+   const mv=V9_v.copy(goal).sub(sc.c).normalize();sc.vel=sc.vel||new THREE.Vector3();sc.vel.lerp(mv,Math.min(1,dt*2));sc.c.addScaledVector(mv,sp.speed*0.55*dt*(fd<2?2.2:1));clampWater(sc.c,0.35)}
   for(let i=0;i<set.fish.length;i++){const f=set.fish[i];const want=V9_v.copy(f.school.c).add(f.off).sub(f.p);
    const fd=f.p.distanceTo(F);if(fd<1.2)want.add(V9_v2.copy(f.p).sub(F).normalize().multiplyScalar(4*(1.2-fd)));      // flee the frog
    if(L&&inBeam(f.p,L)){const d=f.p.distanceTo(L.o);if(d<0.7)want.add(V9_v2.copy(f.p).sub(L.o).normalize().multiplyScalar(2))}
@@ -751,13 +815,16 @@ function buildTurtle(swimmer){const T=new THREE.Group();T.name='Turtle';
  T.traverse(o=>{if(o.isMesh){o.castShadow=!IS_MOBILE;o.receiveShadow=true}});
  const scale=swimmer?1.15:1.35;T.scale.setScalar(scale);
  return{T,neck,legs,swimmer,scale,heading:r9()*6.28,phase:0,tgt:new THREE.Vector3(),tT:0,scared:0,retract:0,speed:0}}
-function buildTurtles(){const spots=IS_MOBILE?[[1.6,2.2,0],[-2.2,1.2,1]]:[[1.6,2.2,0],[-2.2,1.2,1],[3.8,-3.2,0]];
- for(const [x,z,sw] of spots){const t=buildTurtle(!!sw);t.T.position.set(x,sw?-0.95:FLOOR_Y,z);scene.add(t.T);V9.turtles.push(t)}}
+// v10: more turtles (7 desktop / 4 phone), spread around the start pad and its neighbours where the player meets them; each keeps to its home area.
+// Swimmers come up to breathe at the surface now and then and dive again with a plop (also when the frog comes close).
+function buildTurtles(){const spots=IS_MOBILE?[[1.6,2.2,0],[-2.2,1.2,1],[-1.2,-2.4,0],[2.6,-0.8,1]]:[[1.6,2.2,0],[-2.2,1.2,1],[3.8,-3.2,0],[-1.2,-2.4,0],[2.6,-0.8,1],[-3.4,3.0,0],[0.6,4.4,1]];
+ for(const [x,z,sw] of spots){const t=buildTurtle(!!sw);t.T.position.set(x,sw?-0.95:FLOOR_Y,z);t.home=new THREE.Vector3(x,0,z);t.ph0=r9()*6.28;t.surf={state:'swim',t:5+r9()*12};scene.add(t.T);V9.turtles.push(t)}}
+function turtleDive(t){const P=t.T.position;t.surf.state='swim';t.surf.t=14+r9()*12;splash(P.x,P.z,0.55);V10.events.turtleDive++;sfx('turtle',P)}
 function turtleUpdate(dt){const L=lampInfo(),F=frog.position;
  for(const t of V9.turtles){const P=t.T.position;const fd=Math.hypot(P.x-F.x,P.z-F.z)+Math.abs(P.y-F.y)*0.5;
   if(fd<1.5&&t.scared<=0)t.scared=3.0;                                      // startled: stop and pull the head in, then wander off
   t.scared=Math.max(0,t.scared-dt);t.tT-=dt;
-  if(t.tT<=0||Math.hypot(t.tgt.x-P.x,t.tgt.z-P.z)<0.3){const a=r9()*6.28,r=1+r9()*(POND_R-6);t.tgt.set(Math.cos(a)*r,0,Math.sin(a)*r);t.tT=10+r9()*10}
+  if(t.tT<=0||Math.hypot(t.tgt.x-P.x,t.tgt.z-P.z)<0.3){const a=r9()*6.28,r=0.8+r9()*4.2;t.tgt.set(t.home.x+Math.cos(a)*r,0,t.home.z+Math.sin(a)*r);const rr=Math.hypot(t.tgt.x,t.tgt.z);if(rr>POND_R-3)t.tgt.multiplyScalar((POND_R-3)/rr);t.tT=10+r9()*10}
   let goal=t.tgt,want=t.swimmer?0.12:0.07;
   if(t.scared>1.2){want=0}else if(t.scared>0){goal=V9_v.set(P.x+(P.x-F.x),0,P.z+(P.z-F.z));want*=1.8}
   else if(L&&inBeam(P,L)&&P.distanceTo(L.o)>1.7){goal=V9_v.copy(L.o).setY(0);want*=0.8}    // walks toward the lamp light
@@ -770,7 +837,12 @@ function turtleUpdate(dt){const L=lampInfo(),F=frog.position;
   for(const l of t.legs){if(t.swimmer){const s=Math.sin(ph*1.4+(l.front?0:Math.PI*0.6));l.piv.rotation.set(0,(l.front?0.9:0.5)*s*l.sx,(l.front?0.35:0.2)*Math.cos(ph*1.4)*l.sx)}   // paddling strokes
    else{const s=Math.sin(ph+((l.sx*l.sz>0)?0:Math.PI));l.piv.rotation.set(0,0.55*s*l.sx*(t.speed>0.01?1:0.15),Math.max(0,Math.cos(ph+((l.sx*l.sz>0)?0:Math.PI)))*0.22*l.sx)}   // diagonal-pair crawl
    l.piv.scale.setScalar(1-0.35*t.retract)}
-  if(t.swimmer){P.y=lerp(FLOOR_Y+0.5,WY-0.5,0.5+0.5*Math.sin(V9.t*0.12+1.3));t.T.rotation.set(Math.sin(ph*1.4)*0.04,t.heading,Math.sin(ph*0.7)*0.05)}
+  if(t.swimmer){const S=t.surf;S.t-=dt;let yW=lerp(FLOOR_Y+0.5,WY-0.5,0.5+0.5*Math.sin(V9.t*0.12+t.ph0));
+   if(S.state==='swim'&&S.t<=0&&fd>2.5)S.state='rise';
+   if(S.state==='rise'){yW=WY-0.07;if(P.y>WY-0.12){S.state='bask';S.t=4+r9()*4}}
+   else if(S.state==='bask'){yW=WY-0.07;if(S.t<=0||fd<2.2)turtleDive(t)}
+   P.y+=(yW-P.y)*Math.min(1,dt*(S.state==='swim'?0.9:0.6));
+   t.T.rotation.set(Math.sin(ph*1.4)*0.04-THREE.MathUtils.clamp((yW-P.y)*0.7,-0.45,0.45),t.heading,Math.sin(ph*0.7)*0.05,'YXZ')}
   else{P.y=FLOOR_Y+Math.abs(Math.sin(ph))*0.006*(t.speed>0.01?1:0);t.T.rotation.set(0,t.heading,Math.sin(ph)*0.03*(t.speed>0.01?1:0))}}}
 // ---------------------------------------------------------------- 3) 小地图
 function buildMinimap(){const wrap=document.createElement('div');wrap.id='mm';
@@ -797,8 +869,20 @@ function drawMinimap(){if(!V9.mm.on)return;const cv=V9.mm.cv,dpr=Math.min(device
  let [px,py]=W2M(0,0);x.fillStyle='#0f2c3a';x.beginPath();x.arc(px,py,POND_R/span*R*0.94,0,7);x.fill();x.strokeStyle='#5f8fb0';x.lineWidth=1.5*dpr;x.stroke();   // pond boundary
  for(const p of PADS){const [a,b]=W2M(p.x,p.z);x.fillStyle=p.flower?'#4f8a3a':'#3e7330';x.beginPath();x.arc(a,b,Math.max(1.2*dpr,p.r/span*R*0.94),0,7);x.fill();
   if(p.flower){x.fillStyle='#f2b8d2';x.beginPath();x.arc(a,b,1.6*dpr,0,7);x.fill()}}
+ // v10: creatures — fish schools (species colour, swimming direction) and turtles (shell + head + legs); translucent while under water
+ V9.mm.icons=[];
+ for(const set of V9.fishSets){const c=set.sp.icon;for(const sc of set.schools){const [a,b]=W2M(sc.c.x,sc.c.z);const vv=sc.vel||{x:0,z:1};const ang=Math.atan2(vv.x,vv.z);
+   x.save();x.translate(a,b);x.rotate(-ang);x.globalAlpha=0.62;x.fillStyle=c;x.strokeStyle='rgba(5,15,25,.8)';x.lineWidth=0.8*dpr;
+   for(const [ox,oy] of [[0,0],[-2.6,-3.4],[2.8,-2.6]]){const u=dpr*(set.sp.len>0.2?1.25:1);x.beginPath();x.ellipse(ox*u,oy*u+1.5*u,2.1*u,3.8*u,0,0,7);x.fill();x.stroke();x.beginPath();x.moveTo(ox*u,oy*u-1.6*u);x.lineTo(ox*u-2.2*u,oy*u-4.4*u);x.lineTo(ox*u+2.2*u,oy*u-4.4*u);x.closePath();x.fill()}
+   x.restore();V9.mm.icons.push({kind:'fish',sp:set.sp.name,x:a/dpr,y:b/dpr,alpha:0.62})}}
+ for(const t of V9.turtles){const P=t.T.position;const [a,b]=W2M(P.x,P.z);const up=P.y>WY-0.2,al=up?1:0.6,u=dpr*1.15;
+  x.save();x.translate(a,b);x.rotate(-t.heading);x.globalAlpha=al;x.fillStyle='#9fb070';
+  for(const [lx,ly] of [[3.4,3],[-3.4,3],[3.2,-3.2],[-3.2,-3.2]]){x.beginPath();x.arc(lx*u,ly*u,1.3*u,0,7);x.fill()}
+  x.beginPath();x.arc(0,5.6*u,1.7*u,0,7);x.fill();x.fillStyle='#5b6a2a';x.strokeStyle='#e8f0c0';x.lineWidth=1*dpr;x.beginPath();x.ellipse(0,0,3.6*u,4.6*u,0,0,7);x.fill();x.stroke();
+  x.restore();V9.mm.icons.push({kind:'turtle',x:a/dpr,y:b/dpr,alpha:al})}
+ x.globalAlpha=1;
  // view fan: camera direction + horizontal FOV, radius ~ fog visibility
- const cd=new THREE.Vector3();camera.getWorldDirection(cd);const yawC=Math.atan2(cd.x,cd.z);const hf=Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov)/2)*camera.aspect);
+ const cd=new THREE.Vector3();camera.getWorldDirection(cd);const yawC=Math.atan2(cd.x,cd.z);V9.mm.fanYaw=yawC;const hf=Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov)/2)*camera.aspect);
  const [fx,fy]=W2M(F.x,F.z);const vis=THREE.MathUtils.clamp(1.2/scene.fog.density,3,14);V9.mm.fanR=vis;const vr=vis/span*R*0.94;
  x.fillStyle='rgba(255,236,150,.18)';x.strokeStyle='rgba(255,236,150,.55)';x.lineWidth=1*dpr;x.beginPath();x.moveTo(fx,fy);
  for(let k=0;k<=16;k++){const a=yawC-hf+2*hf*k/16;x.lineTo(fx+Math.sin(a)*vr,fy+Math.cos(a)*vr)}x.closePath();x.fill();x.stroke();
@@ -816,13 +900,13 @@ const TODS=['day','dusk','night'],TOD_NAME={day:'白天',dusk:'黄昏',night:'�
 const TOD={
  day:{top:col('#2f6fc4'),mid:col('#7fb0e2'),hor:col('#d6e4ea'),sun:new THREE.Vector3(0.42,0.8,-0.43).normalize(),sunCol:col('#fff1d2'),sunAmt:1,moon:0,stars:0,cloudCol:col('#f4f6f8'),
   key:col('#fff0cc'),keyI:2.3,hs:col('#d6e6ff'),hg:col('#5d6e3c'),hI:0.95,fill:col('#bcd4f4'),fillI:0.45,bounceI:0.2,fog:col('#bccfd6'),fogD:0.011,under:col('#1d6560'),underD:0.2,
-  water:col('#2f625c'),exp:1.0,env:1.0,rim:col('#fff4dc'),rimK:0.35,ff:0,dfly:1,bank:col('#3b5130'),reed:col('#5d7838'),tree:col('#284526')},
+  water:col('#2f625c'),exp:1.0,env:1.0,rim:col('#fff4dc'),rimK:0.35,ff:0,dfly:1,bank:col('#3b5130'),reed:col('#ffffff'),tree:col('#ffffff')},
  dusk:{top:col('#25386e'),mid:col('#7a628e'),hor:col('#f09a62'),sun:new THREE.Vector3(0.86,0.1,-0.5).normalize(),sunCol:col('#ffb070'),sunAmt:0.9,moon:0.35,stars:0.25,cloudCol:col('#b98a8a'),
   key:col('#ffb57e'),keyI:1.6,hs:col('#9a86b2'),hg:col('#2c2a1a'),hI:0.6,fill:col('#7c88c8'),fillI:0.55,bounceI:0.7,fog:col('#5e5266'),fogD:0.018,under:col('#123a3c'),underD:0.25,
-  water:col('#1d343c'),exp:1.05,env:0.95,rim:col('#ffc9a2'),rimK:0.7,ff:0.45,dfly:0.35,bank:col('#1d2616'),reed:col('#3a4628'),tree:col('#121a10')},
+  water:col('#1d343c'),exp:1.05,env:0.95,rim:col('#ffc9a2'),rimK:0.7,ff:0.45,dfly:0.35,bank:col('#1d2616'),reed:col('#8a8068'),tree:col('#6a6458')},
  night:{top:new THREE.Color(.012,.025,.07),mid:new THREE.Color(.03,.07,.16),hor:new THREE.Color(.07,.13,.20),sun:new THREE.Vector3(0.6,-0.4,-0.6).normalize(),sunCol:col('#000000'),sunAmt:0,moon:1,stars:1,cloudCol:col('#1a2232'),
   key:col('#c9dcff'),keyI:1.35,hs:col('#3b5288'),hg:col('#0b1a10'),hI:0.6,fill:col('#7f9cd6'),fillI:0.7,bounceI:0.9,fog:NIGHT_FOG.clone(),fogD:0.022,under:UNDER_FOG.clone(),underD:0.28,
-  water:col('#0a2a30'),exp:1.05,env:0.9,rim:col('#a9c6ff'),rimK:1,ff:1,dfly:0,bank:col('#0e1a10'),reed:col('#2c3d22'),tree:col('#07110b')}};
+  water:col('#0a2a30'),exp:1.05,env:0.9,rim:col('#a9c6ff'),rimK:1,ff:1,dfly:0,bank:col('#0e1a10'),reed:col('#556a5e'),tree:col('#3a4a4c')}};
 const WXS=['clear','overcast','rain','fog','snow','storm'],WX_NAME={clear:'晴',overcast:'阴',rain:'雨',fog:'雾',snow:'雪',storm:'雷雨'};
 // cloud cover, sky desaturation / darkening, key-light factor, fog multiplier + grey tint, particles, lightning
 const WX={clear:{cloud:0,fogAdd:0,desat:0,dark:1,keyK:1,fogK:1,fogGrey:0,rain:0,snow:0,bolt:0,wave:0.32,ffK:1,dflyK:1},
@@ -834,7 +918,7 @@ const WX={clear:{cloud:0,fogAdd:0,desat:0,dark:1,keyK:1,fogK:1,fogGrey:0,rain:0,
 const KEY_DIR=MOON_DIR.clone();
 const ATMO={tod:'night',wx:'clear',wT:{day:0,dusk:0,night:1},wW:{clear:1,overcast:0,rain:0,fog:0,snow:0,storm:0},
  quality:IS_MOBILE?'low':'high',flash:0,strikes:0,nextBolt:6,thunder:false,envMaps:null,envIdx:-1,cur:null,
- out:{fogC:new THREE.Color(),fogD:0.022,underC:new THREE.Color(),underD:0.28,exp:1.05}};
+ out:{fogC:new THREE.Color(),fogLin:new THREE.Color(),fogD:0.022,underC:new THREE.Color(),underD:0.28,exp:1.05}};
 const _c=new THREE.Color(),_c2=new THREE.Color(),_grey=new THREE.Color();
 function blendC(dst,P,W,key){dst.setRGB(0,0,0);for(const k in W){if(W[k]>1e-4)dst.add(_c.copy(P[k][key]).multiplyScalar(W[k]))}return dst}
 function blendN(P,W,key){let v=0;for(const k in W)v+=P[k][key]*W[k];return v}
@@ -877,14 +961,29 @@ const snow=(()=>{const n=QMAX.snow,sd=new Float32Array(n*3);for(let i=0;i<n;i++)
   fragmentShader:'uniform float uOp;varying float vA;void main(){float d=length(gl_PointCoord-.5);if(d>.5)discard;gl_FragColor=vec4(vec3(.96,.97,1.),smoothstep(.5,.18,d)*vA*uOp);}'}));
  m.frustumCulled=false;m.renderOrder=7;m.visible=false;m.name='Snow';scene.add(m);return m})();
 // --- lightning: a jagged far bolt + sky / light flash, optional synthesized thunder
-const bolt=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0xf2f4ff,transparent:true,opacity:0,fog:false,depthWrite:false,blending:THREE.AdditiveBlending}));bolt.frustumCulled=false;bolt.renderOrder=1;scene.add(bolt);
-function makeBolt(){const a=r9()*6.28,d=120,top=new THREE.Vector3(Math.cos(a)*d,72,Math.sin(a)*d);const pts=[top.clone()];let p=top.clone();
- for(let i=0;i<22;i++){p=p.clone().add(new THREE.Vector3((r9()-.5)*7,-3.3,(r9()-.5)*7));pts.push(p)}bolt.geometry.dispose();bolt.geometry=new THREE.BufferGeometry().setFromPoints(pts)}
-let THUNDER_BUF=null;function thunder(delay){try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();if(AC.state==='suspended')AC.resume();
- if(!THUNDER_BUF){const sr=AC.sampleRate,d=3.4,b=AC.createBuffer(1,sr*d|0,sr),x=b.getChannelData(0);let l=0,l2=0;
-  for(let i=0;i<x.length;i++){const t=i/sr;l=l*0.97+(Math.random()*2-1)*0.3;l2=l2*0.995+l*0.05;x[i]=(l*0.35+l2*2.2)*Math.exp(-t*1.1)*Math.min(1,t/0.04)*(1+0.7*Math.max(0,Math.sin(t*5.3)))}THUNDER_BUF=b}
- const s=AC.createBufferSource();s.buffer=THUNDER_BUF;const f=AC.createBiquadFilter();f.type='lowpass';f.frequency.value=420;const g=AC.createGain();g.gain.value=0.85;s.connect(f).connect(g).connect(AC.destination);s.start(AC.currentTime+delay)}catch(e){}}
-function strike(){makeBolt();ATMO.strikes++;ATMO.flashT=0;if(ATMO.thunder)thunder(0.6+r9()*1.8)}
+// v10: the bolt is a camera-facing ribbon (bright core + wide blue glow, with side branches), struck inside the current view so it is actually seen;
+// its height / width shrink with the strike distance. Debug: ?bolt=1 (strike every 3 s in any weather), ?bolt=hold (also freeze the flash), panel ⚡ button.
+const boltMat=new THREE.MeshBasicMaterial({color:0xf4f6ff,transparent:true,opacity:0,fog:false,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide});
+const boltGlowMat=new THREE.MeshBasicMaterial({color:0x7f98ff,transparent:true,opacity:0,fog:false,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide});
+const bolt=new THREE.Group();bolt.name='Lightning';const boltCore=new THREE.Mesh(new THREE.BufferGeometry(),boltMat),boltGlow=new THREE.Mesh(new THREE.BufferGeometry(),boltGlowMat);
+for(const m of [boltCore,boltGlow]){m.frustumCulled=false;m.renderOrder=1;bolt.add(m)}bolt.visible=false;scene.add(bolt);
+function ribbonGeo(paths,eye,w){const P=[],I=[];const t=new THREE.Vector3(),v=new THREE.Vector3(),sd=new THREE.Vector3();
+ for(const path of paths){const o=P.length/3;for(let i=0;i<path.pts.length;i++){const a=path.pts[Math.max(0,i-1)],b=path.pts[Math.min(path.pts.length-1,i+1)];t.copy(b).sub(a).normalize();v.copy(eye).sub(path.pts[i]).normalize();
+   sd.crossVectors(t,v).normalize().multiplyScalar(w*path.w*(1-0.55*i/path.pts.length));const p=path.pts[i];P.push(p.x+sd.x,p.y+sd.y,p.z+sd.z,p.x-sd.x,p.y-sd.y,p.z-sd.z);
+   if(i){const k=o+(i-1)*2;I.push(k,k+1,k+2,k+1,k+3,k+2)}}}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setIndex(I);return g}
+function makeBolt(dist=800){const eye=camera.position,f=new THREE.Vector3();camera.getWorldDirection(f);f.y=0;if(f.lengthSq()<1e-6)f.set(0,0,-1);f.normalize();
+ const a=Math.atan2(f.x,f.z)+(r9()-.5)*0.9,dir=new THREE.Vector3(Math.sin(a),0,Math.cos(a)),k=THREE.MathUtils.clamp(700/dist,0.5,1.25),R=115;
+ const top=new THREE.Vector3(eye.x+dir.x*R,32+40*k,eye.z+dir.z*R),side=new THREE.Vector3(-dir.z,0,dir.x);const main=[top.clone()];let p=top.clone();const n=22;
+ for(let i=0;i<n;i++){p=p.clone().addScaledVector(side,(r9()-.5)*7*k).add(new THREE.Vector3(0,-(top.y-1)/n,0)).addScaledVector(dir,(r9()-.5)*3);main.push(p)}
+ const paths=[{pts:main,w:1}];for(let b=0;b<3;b++){const i0=3+(r9()*12|0);let q=main[i0].clone();const pts=[q.clone()];const sgn=r9()<.5?-1:1;
+  for(let i=0;i<6+(r9()*4|0);i++){q=q.clone().addScaledVector(side,sgn*(1.5+r9()*4)*k).add(new THREE.Vector3(0,-(2+r9()*3)*k,0));pts.push(q)}paths.push({pts,w:0.5})}
+ for(const [m,w] of [[boltCore,0.55*k+0.25],[boltGlow,4.2*k]]){m.geometry.dispose();m.geometry=ribbonGeo(paths,eye,w)}
+ return dir}
+// v10: each strike has a distance (250-1750 m): the flash comes first, thunder follows dist/343 s later, quieter and duller when far
+function strike(o={}){const dist=o.dist||(250+r9()*1500);const dir=makeBolt(dist);ATMO.strikes++;ATMO.flashT=0;ATMO.flashK=THREE.MathUtils.clamp(1.15-dist/3000,0.65,1);
+ let th=null;if(SND.ctx&&SND.ctx.state==='running'&&(SND.sfxOn||ATMO.thunder))th=thunder(dist,dir);else if(ATMO.thunder&&audioCtx())th=thunder(dist,dir);
+ V10.lastThunder={dist,delay:dist/343,flashAt:SND.ctx?SND.ctx.currentTime:null,sound:th,dir:[dir.x,dir.z]};return V10.lastThunder}
 // --- dragonflies (daytime): segmented metallic abdomen, big compound eyes, 4 veined see-through wings that flap
 let WING_TEX=null;
 function wingTexture(){return noiseTex(256,(x,s)=>{x.clearRect(0,0,s,s);x.fillStyle='rgba(225,235,240,.28)';x.fillRect(0,0,s,s);x.strokeStyle='rgba(60,70,70,.55)';
@@ -941,14 +1040,15 @@ function atmoUpdate(dt){const A=ATMO,st=dt/2.5;   // 2.5 s eased cross-fade
  const WT=A.wT,WW=A.wW,U=sky.userData.U,o=A.out;
  const cloud=blendN(WX,WW,'cloud'),desat=blendN(WX,WW,'desat'),dark=blendN(WX,WW,'dark'),fogK=blendN(WX,WW,'fogK'),fogGrey=blendN(WX,WW,'fogGrey'),rainA=blendN(WX,WW,'rain'),snowA=blendN(WX,WW,'snow'),boltA=blendN(WX,WW,'bolt');
  // lightning flash envelope (double flicker)
- if(boltA>0.5){A.nextBolt-=dt;if(A.nextBolt<=0){strike();A.nextBolt=4+r9()*7}}
- if(A.flashT!==undefined&&A.flashT!==null){A.flashT+=dt;const f=A.flashT;A.flash=f<0.08?1:f<0.16?0.25:f<0.24?0.85:Math.max(0,0.85*(1-(f-0.24)/0.35));bolt.material.opacity=f<0.3?(f<0.08||(f>0.16&&f<0.24)?1:0.4):0;if(f>0.6){A.flashT=null;A.flash=0;bolt.material.opacity=0}}
- bolt.visible=bolt.material.opacity>0;
+ if(boltA>0.5||V10.forceBolt){A.nextBolt-=dt;if(A.nextBolt<=0){strike();A.nextBolt=V10.forceBolt?3:4+r9()*7}}
+ if(A.flashT!==undefined&&A.flashT!==null){A.flashT+=dt;if(V10.flashHold)A.flashT=Math.min(A.flashT,0.04);const f=A.flashT,K=A.flashK||1;A.flash=K*(f<0.08?1:f<0.16?0.25:f<0.24?0.85:Math.max(0,0.85*(1-(f-0.24)/0.35)));
+  boltMat.opacity=f<0.36?(f<0.08||(f>0.16&&f<0.24)?1:0.45):0;boltGlowMat.opacity=boltMat.opacity*0.5;if(f>0.6){A.flashT=null;A.flash=0;boltMat.opacity=boltGlowMat.opacity=0}}
+ bolt.visible=boltMat.opacity>0;
  // sky
  wxShade(blendC(U.top.value,TOD,WT,'top'),desat,dark);wxShade(blendC(U.mid.value,TOD,WT,'mid'),desat,dark);wxShade(blendC(U.hor.value,TOD,WT,'hor'),desat,dark);
  blendC(U.sunCol.value,TOD,WT,'sunCol');U.sunAmt.value=blendN(TOD,WT,'sunAmt')*(1-cloud*0.9);U.sd.value.set(0,0,0);for(const t of TODS)U.sd.value.addScaledVector(TOD[t].sun,WT[t]);U.sd.value.normalize();
  const moonV=blendN(TOD,WT,'moon')*(1-cloud*0.92);U.moonGlow.value=moonV;sky.userData.moon.material.opacity=moonV;sky.userData.moon.visible=moonV>0.02;MOON_GLOW.material.opacity=0.8*moonV;MOON_GLOW.visible=moonV>0.02;
- STARS.material.opacity=0.9*blendN(TOD,WT,'stars')*(1-cloud);STARS.visible=STARS.material.opacity>0.01;
+ STARS.material.opacity=0.9*blendN(TOD,WT,'stars')*(1-cloud)*(1-0.9*THREE.MathUtils.clamp((U.fogAmt.value-0.35)/0.6,0,1));   // v10: stars also fade in thick fogSTARS.visible=STARS.material.opacity>0.01;
  U.cloud.value=cloud;wxShade(blendC(U.cloudCol.value,TOD,WT,'cloudCol'),desat*0.3,dark);U.flash.value=A.flash*0.55;U.uT.value=V9.t;
  // lights: key follows sun by day, moon by night
  KEY_DIR.set(0,0,0);KEY_DIR.addScaledVector(TOD.day.sun,WT.day).addScaledVector(TOD.dusk.sun,WT.dusk).addScaledVector(MOON_DIR,WT.night).normalize();
@@ -957,10 +1057,15 @@ function atmoUpdate(dt){const A=ATMO,st=dt/2.5;   // 2.5 s eased cross-fade
  blendC(fill.color,TOD,WT,'fill');fill.intensity=blendN(TOD,WT,'fillI')*(0.7+0.3*dark);bounce.intensity=blendN(TOD,WT,'bounceI');
  const rimC=blendC(_c2,TOD,WT,'rim').multiplyScalar(blendN(TOD,WT,'rimK'));for(const u of RIM.uniforms){if(!u.base)u.base=u.value.clone().multiply(new THREE.Color(1/RIM.color.r,1/RIM.color.g,1/RIM.color.b));u.value.copy(u.base).multiply(rimC)}
  // fog / water / shore
- wxShade(blendC(o.fogC,TOD,WT,'fog'),fogGrey,1);if(fogGrey>0.3)o.fogC.lerp(_c.copy(U.hor.value),0.35);o.fogD=blendN(TOD,WT,'fogD')*fogK+blendN(WX,WW,'fogAdd');
+ // v10 fog fix: three.js encodes the fog colour to sRGB, the sky shader writes raw values -> v9 fog came out brighter than the sky, so fogged far trees
+ // turned into white silhouettes in rain / fog. Now the fog colour is built in display space (preset leaning on the weather-shaded horizon), the lower
+ // sky dome is fogged with that same colour (higher up the thicker the fog), and the scene fog gets the matching linear value.
+ blendC(o.fogC,TOD,WT,'fog').convertLinearToSRGB();wxShade(o.fogC,fogGrey,dark);o.fogD=blendN(TOD,WT,'fogD')*fogK+blendN(WX,WW,'fogAdd');
+ o.fogC.lerp(U.hor.value,THREE.MathUtils.clamp(0.3+cloud*0.4+fogGrey*0.25,0,0.9));U.fogC.value.copy(o.fogC);U.fogAmt.value=THREE.MathUtils.clamp(o.fogD*13,0,1);
+ o.fogLin.copy(o.fogC).convertSRGBToLinear();
  blendC(o.underC,TOD,WT,'under').multiplyScalar(0.75+0.25*dark);o.underD=blendN(TOD,WT,'underD');o.exp=blendN(TOD,WT,'exp');
  wxShade(blendC(waterMat.color,TOD,WT,'water'),desat*0.4,1);const wave=blendN(WX,WW,'wave');waterMat.normalScale.set(wave,wave);
- blendC(SHORE.bank.color,TOD,WT,'bank');blendC(SHORE.reed.color,TOD,WT,'reed');blendC(SHORE.tree.color,TOD,WT,'tree');
+ blendC(SHORE.bank.color,TOD,WT,'bank');blendC(SHORE.reed.color,TOD,WT,'reed');blendC(SHORE.tree.color,TOD,WT,'tree');for(const m of SHORE.reedMats)m.color.copy(SHORE.reed.color);for(const m of SHORE.treeMats)m.color.copy(SHORE.tree.color);
  const envT=TODS.reduce((a,t)=>WT[t]>WT[a]?t:a,'night');if(A.envMaps&&A.cur!==envT){scene.environment=A.envMaps[envT];A.cur=envT}
  scene.environmentIntensity=blendN(TOD,WT,'env')*(1-cloud*0.45)+A.flash*0.6;
  // particles
@@ -970,16 +1075,16 @@ function atmoUpdate(dt){const A=ATMO,st=dt/2.5;   // 2.5 s eased cross-fade
  snowU.uT.value=V9.t;snowU.uCam.value.copy(camera.position);snowU.uOp.value=Math.min(1,snowA);snowU.uPx.value=renderer.getPixelRatio();snow.visible=snowA>0.02&&!camUnder;
  const ffA=blendN(TOD,WT,'ff')*blendN(WX,WW,'ffK');fireflies.visible=ffA>0.02;A.ff=ffA;
  const dfA=blendN(TOD,WT,'dfly')*blendN(WX,WW,'dflyK');A.dfly=dfA;dragonflyUpdate(dt,dfA)}
-function atmoApply(under){const o=ATMO.out;scene.fog.color.copy(under?o.underC:o.fogC);scene.fog.density=under?o.underD:o.fogD;renderer.toneMappingExposure=(under?o.exp*1.19:o.exp)*(1+ATMO.flash*0.35);
+function atmoApply(under){const o=ATMO.out;scene.fog.color.copy(under?o.underC:o.fogLin);scene.fog.density=under?o.underD:o.fogD;renderer.toneMappingExposure=(under?o.exp*1.19:o.exp)*(1+ATMO.flash*0.35);
  if(fireflies.visible)fireflies.material.opacity*=ATMO.ff}
 function initAtmo(){bakeEnvMaps();buildDragonflies();setQuality(ATMO.quality);
  const h=document.createElement('div');h.id='atmoBox';
  h.innerHTML='<h3>时段（N）</h3><div class="row seg" id="todBtns">'+TODS.map(t=>`<button class="btn sm" data-tod="${t}">${TOD_NAME[t]}</button>`).join('')+'</div>'+
   '<h3>天气（G）</h3><div class="row seg" id="wxBtns">'+WXS.map(w=>`<button class="btn sm" data-wx="${w}">${WX_NAME[w]}</button>`).join('')+'</div>'+
-  '<div class="row"><label class="tog"><input type="checkbox" id="thunderOn">雷雨时播放雷声</label><label class="tog">粒子画质 <select id="quality"><option value="low">低（手机）</option><option value="high">高</option></select></label></div>';
+  '<div class="row"><label class="tog"><input type="checkbox" id="thunderOn">音效关闭时也播放雷声</label><button class="btn sm" id="boltBtn" title="调试：立即打一个闪电">⚡ 闪电</button><label class="tog">粒子画质 <select id="quality"><option value="low">低（手机）</option><option value="high">高</option></select></label></div>';
  const anchor=$('#vestOn').closest('.row');anchor.after(h);
- h.querySelectorAll('#todBtns button').forEach(b=>b.onclick=()=>setTod(b.dataset.tod));h.querySelectorAll('#wxBtns button').forEach(b=>b.onclick=()=>setWeather(b.dataset.wx));
- $('#thunderOn').onchange=e=>{ATMO.thunder=e.target.checked;if(ATMO.thunder)thunder(0.05)};$('#quality').value=ATMO.quality;$('#quality').onchange=e=>setQuality(e.target.value);
+ h.querySelectorAll('#todBtns button').forEach(b=>b.onclick=()=>setTod(b.dataset.tod));$('#boltBtn').onclick=()=>strike();h.querySelectorAll('#wxBtns button').forEach(b=>b.onclick=()=>setWeather(b.dataset.wx));
+ $('#thunderOn').onchange=e=>{ATMO.thunder=e.target.checked;if(audioCtx())audioApply();if(ATMO.thunder&&SND.ctx)thunder(300,new THREE.Vector3(0,0,-1))};$('#quality').value=ATMO.quality;$('#quality').onchange=e=>setQuality(e.target.value);
  addEventListener('keydown',e=>{if(TYPING()||e.repeat||e.ctrlKey||e.metaKey)return;const k=e.key.toLowerCase();
   if(k==='n')setTod(TODS[(TODS.indexOf(ATMO.tod)+1)%3]);else if(k==='g')setWeather(WXS[(WXS.indexOf(ATMO.wx)+1)%WXS.length])});
  const q=new URLSearchParams(location.search);if(q.get('tod'))setTod(q.get('tod'),true);if(q.get('wx'))setWeather(q.get('wx'),true);if(q.get('q'))setQuality(q.get('q'));atmoUI();atmoUpdate(0)}
@@ -1017,7 +1122,7 @@ initAtmo();
 function v9Update(dt){V9.t+=dt;atmoUpdate(dt);if(!V9.ready)return;
  if(V9.lamp){const under=frog.position.y<WY-0.15;const want=V9.lampOn?(under?9:6):0;V9.spot.intensity+=(want-V9.spot.intensity)*Math.min(1,dt*10);V9.beamMat.uniforms.uI.value=V9.lampOn?(under?0.5:0.28):0;
   $('#lampBtn').classList.toggle('on',V9.lampOn)}
- fishUpdate(dt);turtleUpdate(dt);V9.mmT=(V9.mmT||0)-dt;if(V9.mmT<=0){V9.mmT=0.5;placeMinimap()}drawMinimap()}
+ v10Update(dt);fishUpdate(dt);turtleUpdate(dt);V9.mmT=(V9.mmT||0)-dt;if(V9.mmT<=0){V9.mmT=0.5;placeMinimap()}drawMinimap()}
 function v9State(){const L=V9.lamp;const wp=new THREE.Vector3();if(L)L.getWorldPosition(wp);const mmEl=$('#mm');const rect=mmEl&&V9.mm.on?mmEl.getBoundingClientRect():null;
  const hb=B('head'),hp=new THREE.Vector3();if(hb)hb.getWorldPosition(hp);
  return{mobile:IS_MOBILE,lamp:{on:V9.lampOn,headD:wp.distanceTo(hp),headPos:[hp.x,hp.y,hp.z],intensity:V9.spot?V9.spot.intensity:0,parent:L&&L.parent?L.parent.name:null,pos:[wp.x,wp.y,wp.z],beam:V9.beam?V9.beam.visible:false,meshes:L?L.children.filter(o=>o.isMesh).length:0},
@@ -1026,6 +1131,195 @@ function v9State(){const L=V9.lamp;const wp=new THREE.Vector3();if(L)L.getWorldP
    dFrog:s.fish.reduce((a,f)=>a+f.p.distanceTo(frog.position),0)/s.fish.length,verts:s.m.geometry.attributes.position.count})),
   schools:V9.fishSets.flatMap((s,si)=>s.schools.map(sc=>{const fs=s.fish.filter(f=>f.school===sc);return{set:si,c:sc.c.toArray(),dFrog:fs.reduce((a,f)=>a+f.p.distanceTo(frog.position),0)/fs.length}})),
   turtles:V9.turtles.map(t=>({x:t.T.position.x,y:t.T.position.y,z:t.T.position.z,swimmer:t.swimmer,scared:t.scared,retract:t.retract,leg:t.legs[0].piv.rotation.y,speed:t.speed}))}}
+
+// ===================== v10: 声音（Web Audio，全部程序合成，无外部音频素材）
+// graph: [sfx bus (动作/生物/天气/环境)] [voice (说话/鸣叫)] -> underwater low-pass -> master (总音量 / K 静音) -> compressor -> out
+//        [music bus -> music low-pass (lighter) -> master]; spatial sources go through PannerNodes (HRTF on desktop, equal-power on phones)
+const AUD_KEY='qingyue-audio-v10';
+const SND={ctx:null,n:{},muted:false,vol:0.8,musicOn:true,musicVol:0.55,sfxOn:true,panners:0,noise:null,under:0,mood:{day:0,night:1,storm:0},sched:null,amb:null,music:null};
+try{Object.assign(SND,JSON.parse(localStorage.getItem(AUD_KEY)||'{}'))}catch(e){}
+function audioSave(){try{localStorage.setItem(AUD_KEY,JSON.stringify({muted:SND.muted,vol:SND.vol,musicOn:SND.musicOn,musicVol:SND.musicVol,sfxOn:SND.sfxOn}))}catch(e){}}
+// created on the first user gesture only (browser autoplay rules); later gestures just resume it
+function audioCtx(){if(SND.ctx){if(SND.ctx.state==='suspended')SND.ctx.resume();return SND.ctx}
+ const C=window.AudioContext||window.webkitAudioContext;if(!C)return null;const c=SND.ctx=new C();const n=SND.n;
+ n.master=c.createGain();n.comp=c.createDynamicsCompressor();n.comp.threshold.value=-14;n.comp.ratio.value=3;n.master.connect(n.comp).connect(c.destination);
+ n.uw=c.createBiquadFilter();n.uw.type='lowpass';n.uw.frequency.value=20000;n.uw.Q.value=0.8;n.uw.connect(n.master);
+ n.sfx=c.createGain();n.sfx.connect(n.uw);n.amb=c.createGain();n.amb.connect(n.sfx);n.voice=c.createGain();n.voice.connect(n.uw);
+ n.thunderOut=c.createGain();n.thunderOut.connect(n.uw);
+ n.music=c.createGain();n.musicLP=c.createBiquadFilter();n.musicLP.type='lowpass';n.musicLP.frequency.value=20000;n.music.connect(n.musicLP).connect(n.master);
+ const sr=c.sampleRate,len=sr*2;SND.noise=c.createBuffer(1,len,sr);const d=SND.noise.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;
+ SND.brown=c.createBuffer(1,len,sr);const b=SND.brown.getChannelData(0);let l=0;for(let i=0;i<len;i++){l=(l+0.02*(Math.random()*2-1))/1.02;b[i]=l*3.5}
+ // music reverb: generated impulse response (decaying stereo noise)
+ n.verb=c.createConvolver();const ir=c.createBuffer(2,sr*2.6|0,sr);for(let ch=0;ch<2;ch++){const x=ir.getChannelData(ch);for(let i=0;i<x.length;i++)x[i]=(Math.random()*2-1)*Math.pow(1-i/x.length,2.6)}n.verb.buffer=ir;
+ n.verbOut=c.createGain();n.verbOut.gain.value=0.55;n.verb.connect(n.verbOut).connect(n.music);
+ audioApply();ambInit();musicInit();return c}
+function audioApply(){if(!SND.ctx)return;const n=SND.n,t=SND.ctx.currentTime;
+ n.master.gain.setTargetAtTime(SND.muted?0:SND.vol,t,0.05);n.sfx.gain.setTargetAtTime(SND.sfxOn?1:0,t,0.05);n.music.gain.setTargetAtTime(SND.musicOn?SND.musicVol*0.6:0,t,0.3);
+ n.thunderOut.gain.setTargetAtTime(SND.sfxOn||ATMO.thunder?1:0,t,0.05);audioUI()}
+function audioUI(){const q=(id,f)=>{const e=$('#'+id);if(e)f(e)};q('audVol',e=>e.value=SND.vol);q('musicOn',e=>e.checked=SND.musicOn);q('musicVol',e=>e.value=SND.musicVol);q('sfxOn',e=>e.checked=SND.sfxOn);
+ q('muteBtn',e=>{e.textContent=SND.muted?'🔇':'🔊';e.classList.toggle('on',!SND.muted)})}
+function setMuted(m,silent){SND.muted=m;audioCtx();audioApply();audioSave();if(!silent)toast(m?'静音（K）':'取消静音（K）')}
+// unlock on the first click / key / touch
+for(const ev of ['pointerdown','keydown','touchstart'])addEventListener(ev,()=>audioCtx(),{capture:true,passive:true});
+// ---- helpers
+function panAt(pos,o={}){const c=SND.ctx,p=c.createPanner();p.panningModel=IS_MOBILE?'equalpower':'HRTF';p.distanceModel='inverse';p.refDistance=o.ref||1.5;p.rolloffFactor=o.roll==null?1:o.roll;p.maxDistance=300;
+ if(p.positionX){p.positionX.value=pos.x;p.positionY.value=pos.y;p.positionZ.value=pos.z}else p.setPosition(pos.x,pos.y,pos.z);p.connect(o.bus||SND.n.sfx);SND.panners++;return p}
+function env(g,t,a,peak,dec){g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(peak,t+a);g.gain.exponentialRampToValueAtTime(0.0001,t+a+dec)}
+function noiseSrc(t,dur,buf){const s=SND.ctx.createBufferSource();s.buffer=buf||SND.noise;s.loop=true;s.loopStart=Math.random()*1.5;s.start(t,Math.random()*1.5);s.stop(t+dur+0.05);return s}
+function tone(type,t,dur,f0,f1,out,peak,a=0.005){const c=SND.ctx,o=c.createOscillator(),g=c.createGain();o.type=type;o.frequency.setValueAtTime(f0,t);if(f1&&f1!==f0)o.frequency.exponentialRampToValueAtTime(f1,t+dur);
+ env(g,t,a,peak,dur);o.connect(g).connect(out);o.start(t);o.stop(t+a+dur+0.05);return o}
+function filt(type,f,Q){const b=SND.ctx.createBiquadFilter();b.type=type;b.frequency.value=f;if(Q)b.Q.value=Q;return b}
+function bubbles(t,out,n,base=500){for(let i=0;i<n;i++){const f=base*(0.8+Math.random()*1.2);tone('sine',t+Math.random()*0.35,0.05+Math.random()*0.04,f,f*1.7,out,0.05+Math.random()*0.04)}}
+const frogUnder=()=>CTRL.where==='water'&&frog.position.y<SWIM_SURF-0.1;
+// ---- one-shot effects (all positional)
+function sfx(kind,pos,a){if(!SND.ctx||SND.ctx.state!=='running')return;const c=SND.ctx,t=c.currentTime+0.01;pos=pos||frog.position;V10.events[kind]=(V10.events[kind]||0)+1;
+ if(kind==='jump'){const p=panAt(pos);const bp=filt('bandpass',700,1.2);bp.frequency.setValueAtTime(600,t);bp.frequency.exponentialRampToValueAtTime(1900,t+0.16);const g=c.createGain();env(g,t,0.03,0.22,0.16);noiseSrc(t,0.25).connect(bp).connect(g).connect(p);
+  tone('sine',t,0.1,240,520,p,0.1)}
+ else if(kind==='land'){const p=panAt(pos);const pad=a!=='ground';tone('sine',t,0.16,pad?150:110,pad?70:48,p,0.32);
+  const bp=filt(pad?'bandpass':'lowpass',pad?1300:600,1);const g=c.createGain();env(g,t,0.004,pad?0.28:0.2,pad?0.07:0.1);noiseSrc(t,0.15).connect(bp).connect(g).connect(p);
+  if(pad){const hp=filt('highpass',2600);const g2=c.createGain();env(g2,t+0.03,0.004,0.07,0.06);noiseSrc(t,0.15).connect(hp).connect(g2).connect(p)}}
+ else if(kind==='splash'){const s=a||1,p=panAt(pos,{ref:2});const bp=filt('bandpass',2400,0.9);bp.frequency.setValueAtTime(2800,t);bp.frequency.exponentialRampToValueAtTime(600,t+0.45);const g=c.createGain();env(g,t,0.008,0.4*Math.min(1.3,s),0.5);
+  noiseSrc(t,0.6).connect(bp).connect(g).connect(p);tone('sine',t,0.12,320,120,p,0.18*s);bubbles(t+0.08,p,4+(s*3|0),450)}
+ else if(kind==='stroke'){const u=a&&a.under,k=a?a.k:1;const p=panAt(pos);const bp=filt('bandpass',u?380:760,0.8);const g=c.createGain();g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(0.2*k,t+0.12);g.gain.exponentialRampToValueAtTime(0.0001,t+0.5);
+  noiseSrc(t,0.6).connect(bp).connect(g).connect(p);if(u)bubbles(t+0.1,p,2,380);else{const hp=filt('highpass',2200);const g2=c.createGain();env(g2,t+0.06,0.02,0.05*k,0.2);noiseSrc(t,0.4).connect(hp).connect(g2).connect(p)}}
+ else if(kind==='bubble'){const p=panAt(pos,{ref:1,roll:1.4});bubbles(t,p,1+(Math.random()*3|0),700)}
+ else if(kind==='swish'){const p=panAt(pos,{ref:1.2});const bp=filt('bandpass',900,1.5);const g=c.createGain();env(g,t,0.03,0.08,0.22);noiseSrc(t,0.3).connect(bp).connect(g).connect(p)}
+ else if(kind==='turtle'){const p=panAt(pos,{ref:2});tone('sine',t,0.14,520,150,p,0.3);const bp=filt('bandpass',1500,1);const g=c.createGain();env(g,t,0.005,0.2,0.25);noiseSrc(t,0.35).connect(bp).connect(g).connect(p);bubbles(t+0.12,p,5,420)}}
+// thunder: comes after the flash, delayed by distance (343 m/s); far strikes are quieter, darker (low-passed) and longer; panned to the bolt direction
+let THUNDER_BUF=null;
+function thunderBuf(){if(THUNDER_BUF)return THUNDER_BUF;const c=SND.ctx,sr=c.sampleRate,d=4.2,b=c.createBuffer(2,sr*d|0,sr);
+ for(let ch=0;ch<2;ch++){const x=b.getChannelData(ch);let l=0,l2=0;for(let i=0;i<x.length;i++){const t=i/sr;l=l*0.97+(Math.random()*2-1)*0.3;l2=l2*0.996+l*0.05;
+  x[i]=(l*0.4+l2*2.4)*Math.exp(-t*0.9)*Math.min(1,t/0.03)*(1+0.8*Math.max(0,Math.sin(t*4.1+ch))*Math.exp(-t*0.3))+(t<0.12?(Math.random()*2-1)*0.5*(1-t/0.12):0)}}return THUNDER_BUF=b}
+function thunder(dist,dir){const c=SND.ctx;if(!c)return null;if(c.state==='suspended')c.resume();const delay=dist/343,t=c.currentTime+delay;
+ const s=c.createBufferSource();s.buffer=thunderBuf();s.playbackRate.value=1.05-Math.min(0.3,dist/6000);
+ const lp=filt('lowpass',THREE.MathUtils.clamp(2600*Math.pow(250/dist,0.9),260,2600));const g=c.createGain();const gain=THREE.MathUtils.clamp(Math.pow(300/dist,0.8),0.22,1)*1.1;g.gain.value=gain;
+ const cam=camera.position,p=panAt(new THREE.Vector3(cam.x+dir.x*10,cam.y+2,cam.z+dir.z*10),{ref:10,roll:0,bus:SND.n.thunderOut});
+ s.connect(lp).connect(g).connect(p);s.start(t);V10.events.thunder++;return{dist,delay,gain,cutoff:lp.frequency.value,at:t}}
+// ---- ambience: rain, wind (weather) · crickets, frog chorus (night) · birds, cicadas (day) · underwater hum
+function loopNoise(buf,f,type,Q){const c=SND.ctx,s=c.createBufferSource();s.buffer=buf;s.loop=true;const b=filt(type,f,Q);const g=c.createGain();g.gain.value=0;s.connect(b).connect(g);s.start();return{s,b,g}}
+function ambInit(){const c=SND.ctx,n=SND.n,A=SND.amb={};
+ A.rain=loopNoise(SND.noise,1400,'highpass');A.rain2=loopNoise(SND.noise,3800,'bandpass',0.7);A.rain.g.connect(n.amb);A.rain2.g.connect(n.amb);
+ A.wind=loopNoise(SND.brown,420,'bandpass',0.6);A.wind.g.connect(n.amb);
+ A.hum=loopNoise(SND.brown,160,'lowpass');A.hum.g.connect(n.sfx);
+ // cicada: narrow band noise, amplitude-modulated (~48 Hz pulses) with slow swells
+ A.cic=loopNoise(SND.noise,5600,'bandpass',9);const am=c.createGain();am.gain.value=0.5;const lfo=c.createOscillator();lfo.frequency.value=48;const lg=c.createGain();lg.gain.value=0.5;lfo.connect(lg).connect(am.gain);lfo.start();
+ A.cic.g.disconnect();A.cic.g.connect(am);A.cicPan=panAt(new THREE.Vector3(-14,4,-22),{ref:12,roll:0.6,bus:n.amb});am.connect(A.cicPan);A.cicSwell=0;
+ // crickets: a few fixed singers in the reeds, each one sine carrier gated in chirp pulses
+ A.crickets=[];for(let i=0;i<(IS_MOBILE?3:5);i++){const a=i/5*6.28+r9(),r=POND_R-1+r9()*3;const o=c.createOscillator();o.frequency.value=4100+r9()*900;const g=c.createGain();g.gain.value=0;
+  const p=panAt(new THREE.Vector3(Math.cos(a)*r,0.3,Math.sin(a)*r),{ref:4,roll:0.8,bus:n.amb});o.connect(g).connect(p);o.start();A.crickets.push({g,next:c.currentTime+r9()*2,rate:0.55+r9()*0.5,pulses:3+(r9()*2|0)})}
+ A.nextFrog=c.currentTime+1;A.nextBird=c.currentTime+1;A.nextBubble=c.currentTime+2;A.lvl={}}
+function ambLevels(){const WT=ATMO.wT,WW=ATMO.wW;const night=WT.night+WT.dusk*0.6,day=WT.day+WT.dusk*0.35;const rainA=WW.rain+WW.storm*1.6;
+ const wind={clear:0.05,overcast:0.22,rain:0.3,fog:0.08,snow:0.38,storm:0.85};let w=0;for(const k in WW)w+=wind[k]*WW[k];
+ const calm=WW.clear+WW.overcast*0.8+WW.fog*0.7+WW.rain*0.3;   // how much wildlife is singing
+ return{rain:rainA,wind:w,cricket:night*calm,frogs:night*(WW.clear+WW.overcast+WW.fog*0.8+WW.rain*1.2+WW.storm*0.4)+day*0.12*(WW.clear+WW.rain),birds:day*(WW.clear+WW.overcast*0.6+WW.fog*0.3),cicada:WT.day*(WW.clear+WW.overcast*0.4)}}
+function ambUpdate(dt){const c=SND.ctx,A=SND.amb;if(!A||c.state!=='running')return;const t=c.currentTime,L=ambLevels(),uw=SND.under,dry=1-0.6*uw;A.lvl=L;
+ const set=(g,v,tc=0.4)=>g.gain.setTargetAtTime(v,t,tc);
+ set(A.rain.g,0.16*Math.min(1.6,L.rain)*dry);set(A.rain2.g,0.07*Math.min(1.6,L.rain)*dry);
+ const gust=0.65+0.35*Math.sin(t*0.37)*Math.sin(t*0.13+1);set(A.wind.g,0.5*L.wind*gust*dry,0.6);A.wind.b.frequency.setTargetAtTime(300+260*gust,t,0.8);
+ set(A.hum.g,0.22*uw,0.3);
+ A.cicSwell+=(Math.sin(t*0.21)*Math.sin(t*0.07+2)>0?1:-1)*0.1*dt*3;A.cicSwell=THREE.MathUtils.clamp(A.cicSwell,0,1);set(A.cic.g,0.05*L.cicada*A.cicSwell*dry,0.8);if(L.cicada*A.cicSwell>0.2)V10.events.cicada++;
+ const ahead=t+0.3;
+ for(const k of A.crickets){while(k.next<ahead){if(L.cricket>0.03&&Math.random()<0.85){for(let i=0;i<k.pulses;i++){const s=k.next+i*0.055;k.g.gain.setValueAtTime(0,s);k.g.gain.linearRampToValueAtTime(0.05*L.cricket*dry,s+0.006);k.g.gain.linearRampToValueAtTime(0,s+0.03)}V10.events.cricket++}
+   k.next+=k.rate*(0.85+Math.random()*0.3)+(Math.random()<0.08?2+Math.random()*3:0)}}
+ if(A.nextFrog<ahead){if(L.frogs>0.05){farFrog(A.nextFrog,L.frogs*dry)}A.nextFrog+=0.35+Math.random()*1.4/Math.max(0.3,L.frogs)}
+ if(A.nextBird<ahead){if(L.birds>0.05)bird(A.nextBird,L.birds*dry);A.nextBird+=1.2+Math.random()*4}
+ if(A.nextBubble<ahead){fishBubble();A.nextBubble+=1.2+Math.random()*2.5}}
+function farFrog(t,lv){const c=SND.ctx,a=Math.random()*6.28,r=10+Math.random()*16;const p=panAt(new THREE.Vector3(Math.cos(a)*r,0.2,Math.sin(a)*r),{ref:6,roll:0.7,bus:SND.n.amb});
+ const pitch=[0.8,0.95,1.1,1.3][Math.random()*4|0],n=2+(Math.random()*3|0);
+ for(let k=0;k<n;k++){const s=t+k*(0.16+Math.random()*0.06);const o=c.createOscillator();o.type='sawtooth';o.frequency.setValueAtTime(170*pitch,s);o.frequency.linearRampToValueAtTime(125*pitch,s+0.13);
+  const am=c.createOscillator();am.frequency.value=34;const amg=c.createGain();amg.gain.value=0.5;am.connect(amg);const g=c.createGain();env(g,s,0.015,0.09*lv,0.14);amg.connect(g.gain);
+  const bp=filt('bandpass',750*pitch,2.5);o.connect(bp).connect(g).connect(p);o.start(s);am.start(s);o.stop(s+0.2);am.stop(s+0.2)}V10.events.frogFar++}
+function bird(t,lv){const c=SND.ctx,a=Math.random()*6.28,r=POND_R+6+Math.random()*20;const p=panAt(new THREE.Vector3(Math.cos(a)*r,6+Math.random()*6,Math.sin(a)*r),{ref:10,roll:0.6,bus:SND.n.amb});
+ const kind=Math.random()*3|0,n=kind===2?8:2+(Math.random()*4|0),f0=2400+Math.random()*1800;
+ for(let i=0;i<n;i++){const s=t+i*(kind===2?0.06:0.14+Math.random()*0.08),d=kind===2?0.045:0.08+Math.random()*0.08;const o=c.createOscillator();
+  const f=kind===1?f0*(1+0.12*(i%2)):f0*(1+Math.random()*0.2);o.frequency.setValueAtTime(f*(kind===0?0.8:1),s);o.frequency.exponentialRampToValueAtTime(f*(kind===0?1.35:0.85),s+d);
+  const vib=c.createOscillator();vib.frequency.value=30+Math.random()*25;const vg=c.createGain();vg.gain.value=f*0.04;vib.connect(vg).connect(o.frequency);
+  const g=c.createGain();env(g,s,0.008,0.05*lv,d);o.connect(g).connect(p);o.start(s);vib.start(s);o.stop(s+d+0.05);vib.stop(s+d+0.05)}V10.events.bird++}
+function fishBubble(){if(!V9.fishSets.length)return;const cam=camera.position;let best=null,bd=9;
+ for(const set of V9.fishSets){const f=set.fish[Math.random()*set.fish.length|0];const d=f.p.distanceTo(cam);if(d<bd){bd=d;best=f}}
+ for(const t of V9.turtles){const d=t.T.position.distanceTo(cam);if(d<bd&&Math.random()<0.3){bd=d;best={p:t.T.position}}}
+ if(best&&(cam.y<WY||Math.random()<0.5))sfx('bubble',best.p)}
+// ---- background music: generative, three moods cross-faded with the time of day / weather — day (D major pentatonic, kalimba + warm pad),
+//      night (A minor, soft bells + sine pad), storm (D minor, low drone + dark pad). Scheduled ahead on the audio clock.
+const MUS={
+ day:{step:60/72/2,chordDur:60/72*8,chords:[[50,57,64,66],[47,54,62,66],[43,55,59,66],[45,57,62,64]],mel:[74,76,78,81,83,86,88],prob:0.42,voice:'kalimba',pad:'triangle',padG:0.035,cut:1500},
+ night:{step:60/56,chordDur:60/56*8,chords:[[45,52,59,60],[41,48,57,64],[48,55,59,64],[40,52,55,62]],mel:[69,72,74,76,79,81,84],prob:0.3,voice:'bell',pad:'sine',padG:0.05,cut:900},
+ storm:{step:60/60,chordDur:60/60*8,chords:[[38,45,50,53],[34,46,50,53],[43,50,55,58],[45,52,57,61]],mel:[50,53,55,57,58,62,65],prob:0.24,voice:'low',pad:'sawtooth',padG:0.02,cut:520,drone:[26,38]}};
+const mf=m=>440*Math.pow(2,(m-69)/12);
+function musicInit(){const c=SND.ctx;SND.music={};for(const k in MUS){const g=c.createGain();g.gain.value=0;const dry=c.createGain();dry.gain.value=0.8;g.connect(dry).connect(SND.n.music);g.connect(SND.n.verb);
+  SND.music[k]={g,nextChord:c.currentTime+0.2,nextNote:c.currentTime+0.5,ci:0,mi:3,w:0}}
+ const D=MUS.storm.drone,dg=c.createGain();dg.gain.value=0;const lp=filt('lowpass',300,2);const lfo=c.createOscillator();lfo.frequency.value=0.07;const lg=c.createGain();lg.gain.value=160;lfo.connect(lg).connect(lp.frequency);lfo.start();
+ for(const m of D)for(const det of [-6,5]){const o=c.createOscillator();o.type='sawtooth';o.frequency.value=mf(m);o.detune.value=det;o.connect(lp);o.start()}lp.connect(dg).connect(SND.music.storm.g);SND.music.drone=dg}
+function musicMood(){const WT=ATMO.wT,WW=ATMO.wW,storm=Math.min(1,WW.storm+WW.rain*0.25);return{day:(WT.day+WT.dusk*0.4)*(1-storm),night:(WT.night+WT.dusk*0.6)*(1-storm),storm}}
+function musicUpdate(){const c=SND.ctx;if(!SND.music||c.state!=='running')return;const t=c.currentTime,M=musicMood();SND.mood=M;
+ for(const k in MUS){const L=SND.music[k],P=MUS[k];L.w=M[k];L.g.gain.setTargetAtTime(M[k],t,1.2);
+  if(M[k]<0.02||!SND.musicOn){L.nextChord=Math.max(L.nextChord,t);L.nextNote=Math.max(L.nextNote,t);continue}
+  while(L.nextChord<t+0.4){padChord(L,P,L.nextChord);L.ci=(L.ci+1)%P.chords.length;L.nextChord+=P.chordDur}
+  while(L.nextNote<t+0.4){if(Math.random()<P.prob){L.mi=THREE.MathUtils.clamp(L.mi+[-2,-1,-1,1,1,2,0][Math.random()*7|0],0,P.mel.length-1);note(L,P,L.nextNote,P.mel[L.mi])}
+   L.nextNote+=P.step*(Math.random()<0.2?2:1)}}
+ SND.music.drone.gain.setTargetAtTime(0.05,t,1)}
+function padChord(L,P,t){const c=SND.ctx,d=P.chordDur+2.5,lp=filt('lowpass',P.cut,0.6),g=c.createGain();g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(P.padG,t+2.2);g.gain.setValueAtTime(P.padG,t+d-2.6);g.gain.linearRampToValueAtTime(0.0001,t+d);
+ lp.connect(g).connect(L.g);for(const m of P.chords[L.ci])for(const det of (IS_MOBILE?[0]:[-7,6])){const o=c.createOscillator();o.type=P.pad;o.frequency.value=mf(m);o.detune.value=det;o.connect(lp);o.start(t);o.stop(t+d+0.1)}}
+function note(L,P,t,m){const c=SND.ctx,f=mf(m),g=c.createGain();g.connect(L.g);
+ if(P.voice==='kalimba'){env(g,t,0.004,0.09,1.1);tone('sine',t,1.1,f,f,g,1);tone('sine',t,0.25,f*5.4,f*5.4,g,0.12)}
+ else if(P.voice==='bell'){env(g,t,0.01,0.07,2.8);tone('sine',t,2.8,f,f,g,1);tone('sine',t,1.4,f*2.76,f*2.76,g,0.25);tone('sine',t,0.6,f*5.4,f*5.4,g,0.08)}
+ else{env(g,t,0.02,0.1,2.2);tone('triangle',t,2.2,f,f,g,0.7);tone('sine',t,2.2,f/2,f/2,g,0.5)}}
+// ---- per-frame: listener = camera, underwater low-pass, swim strokes, ambience + music scheduling
+const _lf=new THREE.Vector3();let strokePh=0;
+function audioUpdate(dt){const c=SND.ctx;if(!c||c.state!=='running')return;const t=c.currentTime,Lr=c.listener;camera.getWorldDirection(_lf);const P=camera.position;
+ if(Lr.positionX){Lr.positionX.value=P.x;Lr.positionY.value=P.y;Lr.positionZ.value=P.z;Lr.forwardX.value=_lf.x;Lr.forwardY.value=_lf.y;Lr.forwardZ.value=_lf.z;Lr.upX.value=0;Lr.upY.value=1;Lr.upZ.value=0}
+ else{Lr.setPosition(P.x,P.y,P.z);Lr.setOrientation(_lf.x,_lf.y,_lf.z,0,1,0)}
+ const uw=frogUnder()?1:0;SND.under+=(uw-SND.under)*Math.min(1,dt*4);
+ SND.n.uw.frequency.setTargetAtTime(uw?520:20000,t,0.12);SND.n.musicLP.frequency.setTargetAtTime(uw?1300:20000,t,0.2);
+ // one stroke sound per swim cycle, at the leg thrust (clip phase ~0.55)
+ const a=actions.swim;if(a&&cur===a&&CTRL.where==='water'){const ph=(a.time/a.getClip().duration)%1;if(strokePh<0.55&&ph>=0.55)sfx('stroke',frog.position,{under:!!uw,k:0.45+0.55*Math.min(1,Math.abs(CTRL.spd)/1.2+Math.abs(CTRL.vy))});strokePh=ph}
+ ambUpdate(dt);musicUpdate()}
+function audioState(){const c=SND.ctx;return{ctx:c?c.state:null,muted:SND.muted,vol:SND.vol,musicOn:SND.musicOn,musicVol:SND.musicVol,sfxOn:SND.sfxOn,
+ master:c?SND.n.master.gain.value:null,music:c?SND.n.music.gain.value:null,sfx:c?SND.n.sfx.gain.value:null,lowpass:c?SND.n.uw.frequency.value:null,under:SND.under,panners:SND.panners,
+ nodes:c?Object.keys(SND.n):[],rain:c&&SND.amb?SND.amb.rain.g.gain.value:null,wind:c&&SND.amb?SND.amb.wind.g.gain.value:null,levels:SND.amb?SND.amb.lvl:null,
+ mood:SND.mood,musicW:SND.music?Object.fromEntries(Object.keys(MUS).map(k=>[k,SND.music[k].g.gain.value])):null,events:{...V10.events},lastThunder:V10.lastThunder,
+ panModel:IS_MOBILE?'equalpower':'HRTF'}}
+
+// ---------------------------------------------------------------- v10: 面板（声音 / 镜头）、HUD 按钮、K 静音、靠近生物提示、状态
+function initV10UI(){const h=document.createElement('div');h.id='v10Box';
+ h.innerHTML='<h3>声音（K 静音）</h3><div class="sl"><span>总音量</span><input id="audVol" type="range" min="0" max="1" step="0.01"><output></output></div>'+
+  '<div class="row"><label class="tog"><input type="checkbox" id="musicOn">背景音乐</label><label class="tog"><input type="checkbox" id="sfxOn">音效（动作 / 生物 / 天气 / 环境）</label></div>'+
+  '<div class="sl"><span>音乐音量</span><input id="musicVol" type="range" min="0" max="1" step="0.01"><output></output></div>'+
+  '<h3>镜头（F）</h3><div class="row seg" id="camBtns">'+CAM_MODES.map(m=>`<button class="btn sm" data-cam="${m}">${CAM_NAME[m]}</button>`).join('')+'</div>'+
+  '<div class="row"><label class="tog"><input type="checkbox" id="autoRecenter" checked>自动回正（松手后回到身后）</label><label class="tog"><input type="checkbox" id="hintOn" checked>靠近生物提示</label></div>';
+ const anchor=$('#atmoBox')||$('#vestOn').closest('.row');anchor.after(h);
+ const out=(i)=>{i.nextElementSibling.textContent=Math.round(+i.value*100)+'%'};
+ $('#audVol').oninput=e=>{SND.vol=+e.target.value;out(e.target);if(SND.muted&&SND.vol>0)SND.muted=false;audioCtx();audioApply();audioSave()};
+ $('#musicVol').oninput=e=>{SND.musicVol=+e.target.value;out(e.target);audioCtx();audioApply();audioSave()};
+ $('#musicOn').onchange=e=>{SND.musicOn=e.target.checked;audioCtx();audioApply();audioSave()};$('#sfxOn').onchange=e=>{SND.sfxOn=e.target.checked;audioCtx();audioApply();audioSave()};
+ h.querySelectorAll('#camBtns button').forEach(b=>b.onclick=()=>setCamMode(b.dataset.cam));
+ $('#autoRecenter').onchange=e=>{CAM.autoRecenter=e.target.checked};$('#hintOn').onchange=e=>{V10.hint.on=e.target.checked};
+ const mb=document.createElement('button');mb.id='muteBtn';mb.title='静音 / 取消静音 (K)';mb.onclick=()=>setMuted(!SND.muted);$('#hud .modes').appendChild(mb);
+ const cb=document.createElement('button');cb.id='camBtn';cb.title='镜头：跟随 / 自由 / 第一人称 (F)';cb.textContent='🎥';cb.onclick=()=>setCamMode(CAM_MODES[(CAM_MODES.indexOf(CAM.mode)+1)%CAM_MODES.length]);$('#hud .modes').appendChild(cb);
+ addEventListener('keydown',e=>{if(TYPING()||e.repeat||e.ctrlKey||e.metaKey)return;if(e.key.toLowerCase()==='k')setMuted(!SND.muted)});
+ audioUI();out($('#audVol'));out($('#musicVol'));setCamMode(CAM.mode,true);
+ const q=new URLSearchParams(location.search);if(q.get('cam'))setCamMode(q.get('cam'),true);if(q.get('bolt')){V10.forceBolt=true;ATMO.nextBolt=0.5;if(q.get('bolt')==='hold')V10.flashHold=true}}
+initV10UI();
+function creatureHint(){if(!V10.hint.on||!V9.ready)return;const F=frog.position;let best=null,bd=2.4;
+ for(const t of V9.turtles){const d=t.T.position.distanceTo(F);if(d<bd){bd=d;best={k:'turtle',txt:t.surf&&t.surf.state==='bask'?'🐢 一只乌龟浮上来换气':'🐢 附近有一只乌龟'}}}
+ for(const set of V9.fishSets)for(const sc of set.schools){const d=sc.c.distanceTo(F);if(d<bd){bd=d;best={k:'fish:'+set.sp.name,txt:'🐟 一群'+set.sp.name+'游过'}}}
+ if(!best)return;const c=V10.hint.cool;if((c[best.k]??-99)>tAll-14)return;c[best.k]=tAll;V10.hint.last=best.txt;V10.hint.lastT=tAll;toast(best.txt,1800)}
+function v10Update(dt){const WW=ATMO.wW;PLANT_WIND.value=0.05*WW.clear+0.22*WW.overcast+0.3*WW.rain+0.08*WW.fog+0.38*WW.snow+0.85*WW.storm;
+ audioUpdate(dt);V10.hT=(V10.hT||0)-dt;if(V10.hT<=0){V10.hT=0.4;creatureHint()}
+ const mb=$('#muteBtn');if(mb){const lbl=SND.muted?'🔇':'🔊';if(mb.textContent!==lbl)audioUI()}}
+function v10State(){const L=V9.lamp,wp=new THREE.Vector3(),cf=new THREE.Vector3();if(L){L.updateWorldMatrix(true,false);L.getWorldPosition(wp)}
+ if(V9.lampCrown&&V9.crownFrontLocal)cf.copy(V9.crownFrontLocal).applyMatrix4(V9.lampCrown.matrixWorld);
+ const bd=L?LAMP_AIM.clone().transformDirection(L.matrixWorld):new THREE.Vector3(),ff=fwdOf(CTRL.yaw),cd=new THREE.Vector3();camera.getWorldDirection(cd);
+ const chain=[];for(let o=L&&L.parent;o&&o!==model;o=o.parent)chain.push(o.name);let cones=0;scene.traverse(o=>{if(o.isMesh&&!o.isInstancedMesh&&o.geometry.type==='ConeGeometry'&&o.geometry.parameters.radius>1)cones++});
+ const plants={};scene.traverse(o=>{if(o.isInstancedMesh&&/Reed|Cattail|Willow|Metasequoia|Shrub/.test(o.name))plants[o.name]=o.count});
+ const U=sky.userData.U;
+ return{cam:{mode:CAM.mode,pinned:CAM.pinned,yaw:CAM.yaw,elev:CAM.elev,dist:CAM.dist,aim:CAM.aim,under:CAM.under,autoRecenter:CAM.autoRecenter,recenter:CAM.recenter,dragging:!!CAM.drag,
+   pos:camera.position.toArray(),dir:cd.toArray(),behindErr:wrapA(CTRL.yaw+Math.PI-CAM.yaw),camToFrog:camera.position.distanceTo(frog.position),orbit:controls.enabled},
+  lamp:{pos:wp.toArray(),crownFront:cf.toArray(),dCrown:wp.distanceTo(cf),beamDir:bd.toArray(),beamFwd:bd.x*ff.x+bd.z*ff.z,chain,on:V9.lampOn},
+  minimap:{icons:V9.mm.icons||[],on:V9.mm.on,fanYaw:V9.mm.fanYaw},turtles:V9.turtles.map(t=>({x:t.T.position.x,y:t.T.position.y,z:t.T.position.z,swimmer:t.swimmer,surf:t.surf?t.surf.state:null})),
+  hint:{on:V10.hint.on,last:V10.hint.last,lastT:V10.hint.lastT,now:tAll},plants,coneTrees:cones,shoreCounts:SHORE.counts,
+  fog:{color:scene.fog.color.toArray(),density:scene.fog.density,skyHor:U.hor.value.toArray(),skyFogAmt:U.fogAmt.value},
+  bolt:{visible:bolt.visible,core:boltMat.opacity,glow:boltGlowMat.opacity,strikes:ATMO.strikes,flash:ATMO.flash,force:V10.forceBolt,hold:V10.flashHold},audio:audioState()}}
 
 // ---------- UI misc
 document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.id===b.dataset.p));$('#panel').classList.remove('min')});
@@ -1101,7 +1395,8 @@ function tick(){requestAnimationFrame(tick);const dt=Math.min(clock.getDelta(),0
  }
  if(V9.lamp)syncLamp();if(controls.enabled)controls.update();renderer.render(scene,camera)}
 tick();
-window.__pond={v9:()=>v9State(),atmo:()=>atmoState(),setTod:t=>setTod(t,true),setWeather:w=>setWeather(w,true),setQuality,strike,setLamp:on=>setLamp(on,true),toggleMinimap:on=>toggleMinimap(on,true),setZoom,state:()=>({mode:CTRL.mode,where:CTRL.where,x:frog.position.x,y:frog.position.y,z:frog.position.z,yaw:CTRL.yaw,jumping:!!CTRL.jump,jumpKind:CTRL.jump?CTRL.jump.kind:null,anim:cur?cur.getClip().name:null,
+window.__pond={v10:()=>v10State(),audio:()=>audioState(),camMode:m=>setCamMode(m,true),camYaw:a=>{CAM.yaw=a;CAM.snap=true},flashHold:on=>{V10.flashHold=on},forceBolt:on=>{V10.forceBolt=on;ATMO.nextBolt=0.3},
+ setMuted:m=>setMuted(m,true),turtleSurface:i=>{const t=V9.turtles.filter(t=>t.swimmer)[i||0];if(t){t.surf.state='rise';t.surf.t=30;return V9.turtles.indexOf(t)}return -1},setHint:on=>{V10.hint.on=on;V10.hint.cool={}},v9:()=>v9State(),atmo:()=>atmoState(),setTod:t=>setTod(t,true),setWeather:w=>setWeather(w,true),setQuality,strike,setLamp:on=>setLamp(on,true),toggleMinimap:on=>toggleMinimap(on,true),setZoom,state:()=>({mode:CTRL.mode,where:CTRL.where,x:frog.position.x,y:frog.position.y,z:frog.position.z,yaw:CTRL.yaw,jumping:!!CTRL.jump,jumpKind:CTRL.jump?CTRL.jump.kind:null,anim:cur?cur.getClip().name:null,
   animTime:cur?cur.time:0,target:[CTRL.target.x,CTRL.target.z],valid:CTRL.tvalid,reason:CTRL.treason,pad:CTRL.pad?PADS.indexOf(CTRL.pad):-1,padOff:CTRL.pad?CTRL.pad.off:0,under:camera.position.y<WY,log:CTRL.log.slice(),pads:PADS.length,preview:pathLine.visible,fog:scene.fog.density}),
  setMode,setTarget:(x,z)=>CTRL.target.set(x,0,z),placeWater:(x,z,yaw)=>{CTRL.jump=null;CTRL.where='water';CTRL.pad=null;CTRL.yaw=yaw;CTRL.vy=0;CTRL.spd=0;frog.position.set(x,SWIM_SURF,z);CTRL.lastFrog.copy(frog.position);resetView();setMode(3,true);play('swim',0)},pauseAt:t=>{CTRL.pauseAt=t},resume:()=>{CTRL.paused=false},reset:resetFrog,padInfo:i=>({x:PADS[i].x,z:PADS[i].z,r:PADS[i].r}),
  camLook:(dx,dy,dz,tx,ty,tz,fov)=>{CAM.pinned=true;controls.enabled=true;camera.fov=fov||camera.fov;camera.updateProjectionMatrix();camera.position.set(frog.position.x+dx,frog.position.y+dy,frog.position.z+dz);controls.target.set(frog.position.x+tx,frog.position.y+ty,frog.position.z+tz);controls.update()},
