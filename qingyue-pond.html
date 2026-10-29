@@ -133,6 +133,8 @@ const CAM={mode:'follow',pinned:false,yaw:0,elev:0.31,dist:4.8,DEF_ELEV:IS_MOBIL
  tgt:new THREE.Vector3(),under:false,fpYaw:0,fpPitch:-0.1,snap:true};
 const CAM_MODES=['follow','free','first'],CAM_NAME={follow:'跟随',free:'自由',first:'第一人称'};
 const wrapA=a=>Math.atan2(Math.sin(a),Math.cos(a));
+// v10 C2: one eased turn for land and water: approaches the goal exponentially (ease-out) with a capped top speed -> visibly smooth, no snap
+function easeTurn(cur,goal,dt,k=7,maxRate=5.5){const d=wrapA(goal-cur);const step=Math.sign(d)*Math.min(Math.abs(d),Math.max(0.6*dt,Math.abs(d)*(1-Math.exp(-k*dt))),maxRate*dt);return cur+step}
 function resetView(){const f=(typeof frog!=='undefined')?frog.position:new THREE.Vector3();CAM.pinned=false;
  if(CAM.mode!=='free'&&typeof CTRL!=='undefined'){CAM.yaw=CTRL.yaw+Math.PI;CAM.elev=CAM.DEF_ELEV;CAM.dist=CAM.DEF_DIST;CAM.fpYaw=0;CAM.fpPitch=-0.1;CAM.recenter=false;CAM.aim=0;CAM.snap=true;controls.enabled=false;return}
  controls.enabled=true;camera.position.copy(f).add(HOME.pos);controls.target.copy(f).add(HOME.tgt);controls.update()}
@@ -538,8 +540,7 @@ function swimUpdate(dt){const k=KEYS;let fwdIn=0;
  const up=k.has(' ')||k.has('q'),down=k.has('shift')||k.has('e');
  if(FP()){fwdIn=(k.has('w')||k.has('arrowup')?1:0)-(k.has('s')||k.has('arrowdown')?1:0);const turn=(k.has('a')||k.has('arrowleft')?1:0)-(k.has('d')||k.has('arrowright')?1:0);CTRL.yaw+=turn*1.9*dt}   // first person: v8 tank steering
  else{const dir=camInput();if(dir){const d=wrapA(Math.atan2(dir.x,dir.z)-CTRL.yaw);
-   if(Math.abs(d)>2.4)fwdIn=-1;   // straight back (toward the camera): back-pedal, keep facing
-   else{CTRL.yaw+=Math.sign(d)*Math.min(Math.abs(d),3.4*dt);fwdIn=Math.pow(Math.max(0,Math.cos(d)),1.5)}}}   // v10: steer toward the camera-relative direction, swim once facing it
+   CTRL.yaw=easeTurn(CTRL.yaw,CTRL.yaw+d,dt,6,4.5);const d2=wrapA(Math.atan2(dir.x,dir.z)-CTRL.yaw);fwdIn=Math.pow(Math.max(0,Math.cos(d2)),1.5)}}   // v10 C2: identical to land: W/S/A/D = screen directions; S turns the frog round toward the camera, then it swims
  CTRL.spd+=(fwdIn*1.5-CTRL.spd)*Math.min(1,dt*(fwdIn?1.8:1.2));
  if(up)CTRL.vy+=2.2*dt;else if(down)CTRL.vy-=2.2*dt;else if(frog.position.y<SWIM_SURF)CTRL.vy+=(SWIM_SURF-frog.position.y)*0.9*dt;   // buoyancy floats it back up
  CTRL.vy*=Math.pow(0.25,dt);CTRL.vy=THREE.MathUtils.clamp(CTRL.vy,-1.1,1.1);
@@ -563,9 +564,9 @@ function controllerUpdate(dt){if(!model||CTRL.paused)return;
   const dir=camInput();
   // v10: turn smoothly toward the input direction first (keeps turning after a short tap), hop once facing it
   if(CTRL.mode===1&&FP()){const tr=(KEYS.has('a')||KEYS.has('arrowleft')?1:0)-(KEYS.has('d')||KEYS.has('arrowright')?1:0);if(tr){CTRL.yaw+=tr*2.2*dt;frog.rotation.y=CTRL.yaw}}
-  if(CTRL.mode===1&&dir&&!(FP()&&CTRL.turnGoal!=null))CTRL.turnGoal=Math.atan2(dir.x,dir.z);
-  if(CTRL.mode===1&&CTRL.turnGoal!=null){const d=wrapA(CTRL.turnGoal-CTRL.yaw);CTRL.yaw+=Math.sign(d)*Math.min(Math.abs(d),9*dt);frog.rotation.y=CTRL.yaw;
-   if(Math.abs(d)<0.35){if(dir){const to=frog.position.clone().addScaledVector(fwdOf(CTRL.turnGoal),HOP);if(inPond(to.x,to.z)&&!obstacleAt(to.x,to.z,landY(to.x,to.z)+0.05)){CTRL.turnGoal=null;startJump(to,'hop')}}
+  if(CTRL.mode===1&&dir&&!(FP()&&CTRL.turnGoal!=null)){CTRL.turnGoal=Math.atan2(dir.x,dir.z);CTRL.turnHop=true}   // a tap that starts a turn still hops once the frog faces that way
+  if(CTRL.mode===1&&CTRL.turnGoal!=null){CTRL.yaw=easeTurn(CTRL.yaw,CTRL.turnGoal,dt);const d=wrapA(CTRL.turnGoal-CTRL.yaw);frog.rotation.y=CTRL.yaw;
+   if(Math.abs(d)<0.12){if(dir||CTRL.turnHop){const to=frog.position.clone().addScaledVector(fwdOf(CTRL.turnGoal),HOP);CTRL.turnHop=false;if(inPond(to.x,to.z)&&!obstacleAt(to.x,to.z,landY(to.x,to.z)+0.05)){CTRL.turnGoal=null;startJump(to,'hop')}else CTRL.turnGoal=null}
     else if(Math.abs(d)<1e-3)CTRL.turnGoal=null}}
   if(CTRL.mode===2){if(dir){CTRL.target.addScaledVector(dir,2.6*dt)}const P=plan(frog.position,CTRL.target,'long');CTRL.tvalid=P.ok;CTRL.treason=P.why;
    tgtMark.position.set(CTRL.target.x,P.ty+0.02,CTRL.target.z);rangeRing.position.set(frog.position.x,frog.position.y+0.03,frog.position.z);
@@ -1124,7 +1125,8 @@ function initV9(){attachHeadlamp();buildFish();buildTurtles();buildMinimap();
  addEventListener('keydown',e=>{if(TYPING()||e.repeat)return;const k=e.key.toLowerCase();if(k==='l')setLamp(!V9.lampOn);else if(k==='m')toggleMinimap()});
  V9.ready=true}
 initAtmo();
-function v9Update(dt){V9.t+=dt;atmoUpdate(dt);if(!V9.ready)return;
+let RDT=0;
+function v9Update(dt){V9.t+=dt;atmoUpdate(RDT||dt);if(!V9.ready)return;
  if(V9.lamp){const under=frog.position.y<WY-0.15;const want=V9.lampOn?(under?9:6):0;V9.spot.intensity+=(want-V9.spot.intensity)*Math.min(1,dt*10);V9.beamMat.uniforms.uI.value=V9.lampOn?(under?0.5:0.28):0;
   $('#lampBtn').classList.toggle('on',V9.lampOn)}
  v10Update(dt);fishUpdate(dt);turtleUpdate(dt);V9.mmT=(V9.mmT||0)-dt;if(V9.mmT<=0){V9.mmT=0.5;placeMinimap()}drawMinimap()}
@@ -1219,7 +1221,7 @@ function ambLevels(){const WT=ATMO.wT,WW=ATMO.wW;const night=WT.night+WT.dusk*0.
  return{rain:rainA,wind:w,cricket:night*calm,frogs:night*(WW.clear+WW.overcast+WW.fog*0.8+WW.rain*1.2+WW.storm*0.4)+day*0.12*(WW.clear+WW.rain),birds:day*(WW.clear+WW.overcast*0.6+WW.fog*0.3),cicada:WT.day*(WW.clear+WW.overcast*0.4)}}
 function ambUpdate(dt){const c=SND.ctx,A=SND.amb;if(!A||c.state!=='running')return;const t=c.currentTime,L=ambLevels(),uw=SND.under,dry=1-0.6*uw;A.lvl=L;
  const set=(g,v,tc=0.4)=>g.gain.setTargetAtTime(v,t,tc);
- set(A.rain.g,0.16*Math.min(1.6,L.rain)*dry);set(A.rain2.g,0.07*Math.min(1.6,L.rain)*dry);
+ A.cmd={rain:0.16*Math.min(1.6,L.rain)*dry,wind:0.5*L.wind*dry};set(A.rain.g,0.16*Math.min(1.6,L.rain)*dry);set(A.rain2.g,0.07*Math.min(1.6,L.rain)*dry);
  const gust=0.65+0.35*Math.sin(t*0.37)*Math.sin(t*0.13+1);set(A.wind.g,0.5*L.wind*gust*dry,0.6);A.wind.b.frequency.setTargetAtTime(300+260*gust,t,0.8);
  set(A.hum.g,0.22*uw,0.3);
  A.cicSwell+=(Math.sin(t*0.21)*Math.sin(t*0.07+2)>0?1:-1)*0.1*dt*3;A.cicSwell=THREE.MathUtils.clamp(A.cicSwell,0,1);set(A.cic.g,0.05*L.cicada*A.cicSwell*dry,0.8);if(L.cicada*A.cicSwell>0.2)V10.events.cicada++;
@@ -1281,7 +1283,7 @@ function audioUpdate(dt){const c=SND.ctx;if(!c||c.state!=='running')return;const
  ambUpdate(dt);musicUpdate()}
 function audioState(){const c=SND.ctx;return{ctx:c?c.state:null,muted:SND.muted,vol:SND.vol,musicOn:SND.musicOn,musicVol:SND.musicVol,sfxOn:SND.sfxOn,
  master:c?SND.n.master.gain.value:null,music:c?SND.n.music.gain.value:null,sfx:c?SND.n.sfx.gain.value:null,lowpass:c?SND.n.uw.frequency.value:null,under:SND.under,panners:SND.panners,
- nodes:c?Object.keys(SND.n):[],rain:c&&SND.amb?SND.amb.rain.g.gain.value:null,wind:c&&SND.amb?SND.amb.wind.g.gain.value:null,levels:SND.amb?SND.amb.lvl:null,
+ nodes:c?Object.keys(SND.n):[],rain:c&&SND.amb?SND.amb.rain.g.gain.value:null,rainCmd:SND.amb&&SND.amb.cmd?SND.amb.cmd.rain:null,windCmd:SND.amb&&SND.amb.cmd?SND.amb.cmd.wind:null,ctxTime:c?c.currentTime:0,wind:c&&SND.amb?SND.amb.wind.g.gain.value:null,levels:SND.amb?SND.amb.lvl:null,
  mood:SND.mood,musicW:SND.music?Object.fromEntries(Object.keys(MUS).map(k=>[k,SND.music[k].g.gain.value])):null,events:{...V10.events},lastThunder:V10.lastThunder,
  panModel:IS_MOBILE?'equalpower':'HRTF'}}
 
@@ -1341,7 +1343,7 @@ addEventListener('resize',resize);resize();resetView();
 // ---------- loop
 let hold=null;const clock=new THREE.Clock();const baseSnap=new Map();let blinkT=2,blinkV=0,tAll=0;const mw={};let jawExtra=0,eyeY=0,eyeX=0;
 function setMorph(k,v){for(const m of morphMeshes){const i=m.morphTargetDictionary[k];if(i!==undefined)m.morphTargetInfluences[i]=Math.min(1,Math.max(0,v))}}
-function tick(){requestAnimationFrame(tick);const dt=Math.min(clock.getDelta(),0.05);tAll+=dt;
+function tick(){requestAnimationFrame(tick);const rawDt=clock.getDelta(),dt=Math.min(rawDt,0.05),rdt=Math.min(rawDt,0.5);tAll+=dt;RDT=rdt;   // rdt: wall-clock step for cross-fades (slow frames must not stretch a 2.5 s fade)
  sceneUpdate(dt,tAll);controllerUpdate(dt);v9Update(dt);
  if(model){
   if(turnTarget!==null){let d=turnTarget-frog.rotation.y;d=Math.atan2(Math.sin(d),Math.cos(d));frog.rotation.y+=d*Math.min(1,dt*6);if(Math.abs(d)<0.01)turnTarget=null}

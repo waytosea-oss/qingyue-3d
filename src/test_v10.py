@@ -76,10 +76,17 @@ async def desktop(b):
     check('audio: daytime = birdsong (+ cicadas) and the day music mood',a2['events']['bird']>e['bird'] and a2['musicW']['day']>0.5 and a2['musicW']['night']<0.2,
           'birds +%d, cicada ticks %d, mood %s'%(a2['events']['bird']-e['bird'],a2['events']['cicada'],{k:round(v,2) for k,v in a2['musicW'].items()}))
     check('audio: fish make bubble / swish sounds',a2['events']['bubble']+a2['events']['swish']>0,'bubbles %d, swishes %d'%(a2['events']['bubble'],a2['events']['swish']))
-    rc=a2['rain']; wc=a2['levels']['wind']; await pg.evaluate("window.__pond.setWeather('rain')"); await pg.wait_for_timeout(4000); rr=(await aud(pg))['rain']
-    await pg.evaluate("window.__pond.setWeather('storm')"); await pg.wait_for_timeout(4000); a=await aud(pg); rs=a['rain']
-    check('audio: rain volume follows the amount of rain (clear < rain < storm), wind rises in the storm',rc<0.01<rr<rs and a['levels']['wind']>wc*5 and a['wind']>0.01,
-          'rain gain %.3f / %.3f / %.3f, wind level %.2f -> %.2f (gain now %.3f, gusting)'%(rc,rr,rs,wc,a['levels']['wind'],a['wind']))
+    async def settle(cond):   # poll up to 10 s for the weather cross-fade
+        for _ in range(40):
+            await pg.wait_for_timeout(250); x=await aud(pg)
+            if cond(x): return x
+        return x
+    G=lambda x:x['rainCmd'] if x.get('rainCmd') is not None else x['rain']   # commanded gain (AudioParam.value freezes when the audio device does not render)
+    rc=G(a2); wc=a2['levels']['wind']; await pg.evaluate("window.__pond.setWeather('rain')"); ar=await settle(lambda x:abs(x['levels']['rain']-1)<0.02); rr=G(ar)
+    await pg.evaluate("window.__pond.setWeather('storm')"); a=await settle(lambda x:abs(x['levels']['rain']-1.6)<0.03); rs=G(a)
+    check('audio: rain volume follows the amount of rain (clear < rain < storm), wind rises in the storm',rc<0.01<rr<rs and a['levels']['wind']>wc*5 and (a.get('windCmd') or a['wind'])>0.01,
+          'rain gain %.3f / %.3f / %.3f (live param %.3f, ctx time %.1f s), wind level %.2f -> %.2f'%(rc,rr,rs,a['rain'],a['ctxTime'],wc,a['levels']['wind']))
+    a=await settle(lambda x:x['musicW']['storm']>0.5)   # the music mood has its own (slower) cross-fade
     check('audio: storm music mood',a['musicW']['storm']>0.5,'mood %s'%{k:round(v,2) for k,v in a['musicW'].items()})
     near=await pg.evaluate("window.__pond.strike({dist:400})"); far=await pg.evaluate("window.__pond.strike({dist:1600})")
     check('audio: thunder follows the flash after distance / 343 m/s; farther = later, quieter, duller (low-pass)',
@@ -113,10 +120,10 @@ async def desktop(b):
         res.append(((mv[0]*cd[0]+mv[1]*cd[2])/n/f,yaws,p0['yaw'],p1['yaw']))
     check('camera-relative WASD: W hops toward "into the screen" for two different camera headings',all(r[0]>0.95 for r in res),'alignment %s'%', '.join('%.3f'%r[0] for r in res))
     await pg.evaluate("window.__pond.reset()"); await pg.wait_for_timeout(500); y0=(await st(pg))['yaw']; await pg.evaluate("window.__pond.camYaw(%f)"%(y0+1.5*math.pi)); await pg.wait_for_timeout(300)
-    ys=[]; await pg.keyboard.down('w')
-    for _ in range(12):
-        await pg.wait_for_timeout(25); s=await st(pg); ys.append((s['yaw'],s['jumping']))
-    await pg.keyboard.up('w'); await pg.wait_for_timeout(1200); y1=(await st(pg))['yaw']
+    # sample every rendered frame inside the page (polling over CDP missed short turns)
+    await pg.evaluate("(()=>{window.__yl=[];const f=()=>{const s=window.__pond.state();window.__yl.push([s.yaw,s.jumping]);if(window.__yl.length<90)requestAnimationFrame(f)};requestAnimationFrame(f)})()")
+    await pg.keyboard.down('w'); await pg.wait_for_timeout(450); await pg.keyboard.up('w'); await pg.wait_for_timeout(1200)
+    ys=[tuple(v) for v in await pg.evaluate('window.__yl')]; y1=(await st(pg))['yaw']
     mid=[y for y,j in ys if 0.1<abs(wrap(y-y0))<abs(wrap(y1-y0))-0.1]; first_jump=next((k for k,(y,j) in enumerate(ys) if j),99)
     check('camera-relative WASD: the frog first turns smoothly toward the move direction (90 deg here), then hops',len(mid)>=2 and abs(wrap(y1-y0-math.pi/2))<0.05 and first_jump>0,
           'turn %.2f -> %.2f rad, %d in-between headings before the hop'%(y0,y1,len(mid)))

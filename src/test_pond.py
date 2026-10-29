@@ -77,6 +77,11 @@ async def main():
         a=await st(pg); await hold(pg,'w',1500); b2=await st(pg)
         check('mode 3: W swims forward',math.hypot(b2['x']-a['x'],b2['z']-a['z'])>0.6,'%.2f m'%math.hypot(b2['x']-a['x'],b2['z']-a['z']))
         await hold(pg,'s',900); c=await st(pg); check('mode 3: S swims backward / brakes',math.hypot(c['x']-b2['x'],c['z']-b2['z'])>0.05)
+        # v10 C2: A/D in water now swim toward screen-left/right (no tank steering), so move to open water first:
+        # otherwise the frog swims back to its lily pad and climbs out, and the underwater checks below run on a pad
+        await pg.evaluate("""(()=>{const P=window.__pond;const s=P.state();for(let r=3;r<16;r+=0.5)for(let a=0;a<6.28;a+=0.3){const x=s.x+Math.cos(a)*r,z=s.z+Math.sin(a)*r;
+          if(Math.hypot(x,z)>22)continue;let ok=true;for(let i=0;i<s.pads;i++){const p=P.padInfo(i);if(Math.hypot(p.x-x,p.z-z)<p.r+2.5){ok=false;break}}
+          if(ok){P.placeWater(x,z,s.yaw);return}}})()"""); await pg.wait_for_timeout(500)
         y0=(await st(pg))['yaw']; await hold(pg,'a',700); s=await st(pg); check('mode 3: A/D turn',abs(s['yaw']-y0)>0.5,'yaw change %.2f rad'%(s['yaw']-y0))
         y1=(await st(pg))['y']; await hold(pg,'e',1300); s=await st(pg); check('mode 3: E (down) dives',s['y']<y1-0.4,'y %.2f -> %.2f'%(y1,s['y']))
         y2=s['y']; await pg.keyboard.down('Shift'); await pg.wait_for_timeout(500); await pg.keyboard.up('Shift'); s=await st(pg); check('mode 3: Shift (down) also dives',s['y']<y2-0.05)
