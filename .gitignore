@@ -1,4 +1,13 @@
 .DS_Store
+# intermediate build output of the Blender pipeline (top level only — vendor/three/build/ must stay tracked)
 /build/
-/screenshots/
 *.npy
+# large / generated artefacts are not committed on this branch (already-tracked v8 model files are left as they are)
+*.blend
+*.blend1
+*.fbx
+*.zip
+screenshots/
+src/__pycache__/
+!vendor/three/build/
+!vendor/three/build/three.module.min.js
