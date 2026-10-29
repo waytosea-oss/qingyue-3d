@@ -275,6 +275,8 @@ async def c2(b):
     yaws=[c[1] for c in cj]; flips=max(abs(wrap(yaws[i+1]-yaws[i])) for i in range(len(yaws)-1)); jump=max(c[0] for c in cj)
     check('C2: diving in from a lily pad keeps the heading and the camera moves smoothly (no flip, no jump)',flips<0.35 and jump<0.35 and cj[-1][2]=='water',
           'largest per-frame turn %.2f rad, largest camera step %.2f m'%(flips,jump))
+    help=await pg.evaluate("(document.querySelector('#ctrlHelp')||{}).textContent||''")
+    check('C2: the panel explains the controls in one sentence (same on land and in water, separate rise/dive keys)','陆地、水面、水下都一样' in help and 'Space' in help and 'Shift' in help,help[:40])
     check('C2: no page errors',not logs,str(logs[:2]))
     await pg.close()
 async def birds_trees(b):

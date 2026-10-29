@@ -1336,7 +1336,8 @@ function initV10UI(){const h=document.createElement('div');h.id='v10Box';
   '<div class="row"><label class="tog"><input type="checkbox" id="musicOn">背景音乐</label><label class="tog"><input type="checkbox" id="sfxOn">音效（动作 / 生物 / 天气 / 环境）</label></div>'+
   '<div class="sl"><span>音乐音量</span><input id="musicVol" type="range" min="0" max="1" step="0.01"><output></output></div>'+
   '<h3>镜头（F）</h3><div class="row seg" id="camBtns">'+CAM_MODES.map(m=>`<button class="btn sm" data-cam="${m}">${CAM_NAME[m]}</button>`).join('')+'</div>'+
-  '<div class="row"><label class="tog"><input type="checkbox" id="autoRecenter" checked>自动回正（松手后回到身后）</label><label class="tog"><input type="checkbox" id="hintOn" checked>靠近生物提示</label></div>';
+  '<div class="row"><label class="tog"><input type="checkbox" id="autoRecenter" checked>自动回正（松手后回到身后）</label><label class="tog"><input type="checkbox" id="hintOn" checked>靠近生物提示</label></div>'+
+  '<p id="ctrlHelp" style="font-size:12px;color:#6a7a50;line-height:1.6">操控：陆地、水面、水下都一样——W/↑ 朝屏幕前方，S/↓ 转身朝镜头走，A/D 屏幕左右，青跃会自己平滑转身；上浮 Space/Q，下潜 Shift/E。</p>';
  const anchor=$('#atmoBox')||$('#vestOn').closest('.row');anchor.after(h);
  const out=(i)=>{i.nextElementSibling.textContent=Math.round(+i.value*100)+'%'};
  $('#audVol').oninput=e=>{SND.vol=+e.target.value;out(e.target);if(SND.muted&&SND.vol>0)SND.muted=false;audioCtx();audioApply();audioSave()};

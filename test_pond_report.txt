@@ -1,30 +1,30 @@
 PASS  page loads: frog on the start lily pad, 72 pads
-PASS  mode 1: holding W makes repeated discrete hops  | 2 hops, moved 2.13 m
+PASS  mode 1: holding W makes repeated discrete hops  | 2 hops, moved 2.07 m
 PASS  mode 1: hops use the skeletal jump clip (not sliding)  | clips seen ['jump', 'swim']
 PASS  mode 1: lily pad sinks on landing  | min pad offset -0.069 m
 PASS  mode 1: frozen mid-hop (airborne, root above the pad)  | clip t=0.10
 PASS  mode 1: hopping off the pads into water switches to swimming  | mode 3, clip swim
 PASS  mode 2: range circle + target + trajectory preview shown
-PASS  mode 2: WASD moves the target marker  | moved 1.34 m
+PASS  mode 2: WASD moves the target marker  | moved 1.35 m
 PASS  mode 2: target beyond 3.6 m is rejected (red)  | 超出最远距离 3.6 米
 PASS  mode 2: Space does nothing on an invalid target
 PASS  mode 2: target 2.2 m away on a lily pad is valid (green)
 PASS  mode 2: Space starts a long jump with the jump clip
 PASS  mode 2: lands on the target pad  | landed 0.00 m from target, pad #3
 PASS  mode 3: from a pad it dives into the water and swims  | y -0.39
-PASS  mode 3: W swims forward  | 1.52 m
+PASS  mode 3: W swims forward  | 1.49 m
 PASS  mode 3: S swims backward / brakes
 PASS  mode 3: A/D turn  | yaw change 1.57 rad
 PASS  mode 3: E (down) dives  | y -0.36 -> -1.43
 PASS  mode 3: Shift (down) also dives
 PASS  underwater camera: dense blue-green underwater fog  | fog 0.28
-PASS  mode 3: Space (up) rises  | y -1.44 -> -0.90
+PASS  mode 3: Space (up) rises  | y -1.44 -> -0.91
 PASS  mode 3: buoyancy floats it back to the surface  | y -0.36
 PASS  mode 3: swimming into a pad edge climbs onto it (jump)  | pad #1, mode 1
-PASS  T: speaks a line with the Edge TTS MP3  | clip sci6, jaw 14.1 deg
-PASS  talking opens the jaw clearly (target ~20-22 deg, cap 22)  | max 16.9 deg, mean 10.7 deg
+PASS  T: speaks a line with the Edge TTS MP3  | clip sci6, jaw 14.3 deg
+PASS  talking opens the jaw clearly (target ~20-22 deg, cap 22)  | max 16.9 deg, mean 10.9 deg
 PASS  C: croak on a lily pad
-PASS  croak inflates the vocal sac (bone scale ~16.7 = head-wide balloon)  | sac scale 1.0 -> 14.7
+PASS  croak inflates the vocal sac (bone scale ~16.7 = head-wide balloon)  | sac scale 1.0 -> 15.6
 PASS  V: toggles the vest
 PASS  no console errors / no HTTP errors  | []
 

@@ -1,6 +1,6 @@
 PASS  audio: no AudioContext before the first user gesture (autoplay rules)  | ctx None
 PASS  audio: first key press creates + runs the context with master / sfx / ambience / voice / music buses and the underwater low-pass  | ctx running, nodes master,comp,uw,sfx,amb,voice,thunderOut,music,musicLP,verb,verbOut
-PASS  audio: night ambience = crickets + distant frog chorus, spatial (PannerNode HRTF)  | crickets +16, far frogs +2, 15 panners
+PASS  audio: night ambience = crickets + distant frog chorus, spatial (PannerNode HRTF)  | crickets +11, far frogs +3, 13 panners
 PASS  audio: background music plays the night mood at night  | mood weights {'day': 0, 'night': 0.99, 'storm': 0}
 PASS  audio: hop take-off, landing on a lily pad and the splash into water each make a sound  | jump +2, land +1, splash +1
 PASS  audio: breaststroke = one stroke sound per swim cycle  | 5 strokes in 3 s (cycle 1.10 s at speed-dependent tempo)
@@ -8,16 +8,16 @@ PASS  audio: frog under water -> whole mix low-passed (BiquadFilter)  | y -1.52,
 PASS  audio: back at the surface the low-pass opens again  | cutoff 19994 Hz
 PASS  turtles: a swimmer surfaces to breathe (opaque icon on the creature radar while up)  | state bask, y -0.12, icon alpha 1.00
 PASS  audio: the turtle dives when the frog comes close -> plop / splash sound  | state swim, dives +2
-PASS  audio: daytime = birdsong (+ cicadas) and the day music mood  | birds +1, cicada ticks 540, mood {'day': 1.0, 'night': 0.0, 'storm': 0}
-PASS  audio: fish make bubble / swish sounds  | bubbles 10, swishes 2
-PASS  audio: rain volume follows the amount of rain (clear < rain < storm), wind rises in the storm  | rain gain 0.000 / 0.064 / 0.102 (live param 0.064, ctx time 32.9 s), wind level 0.05 -> 0.85
-PASS  audio: storm music mood  | mood {'day': 0.41, 'night': 0.0, 'storm': 0.59}
+PASS  audio: daytime = birdsong (+ cicadas) and the day music mood  | birds +1, cicada ticks 539, mood {'day': 1.0, 'night': 0.0, 'storm': 0}
+PASS  audio: fish make bubble / swish sounds  | bubbles 8, swishes 2
+PASS  audio: rain volume follows the amount of rain (clear < rain < storm), wind rises in the storm  | rain gain 0.000 / 0.064 / 0.102 (live param 0.064, ctx time 32.8 s), wind level 0.05 -> 0.85
+PASS  audio: storm music mood  | mood {'day': 0.4, 'night': 0.0, 'storm': 0.6}
 PASS  audio: thunder follows the flash after distance / 343 m/s; farther = later, quieter, duller (low-pass)  | near 1.17 s gain 0.87 1703 Hz / far 4.66 s gain 0.29 489 Hz
 PASS  mute: K silences everything (master gain 0, HUD 🔇) and K again restores it  | master 0.000 -> 0.800
 PASS  panel: master volume slider, music on/off + music volume, sound-effects on/off  | master 0.30, music off 0.002, music vol 1 -> 0.60, sfx off 0.000
 PASS  camera: default = follow camera behind the frog (OrbitControls off)  | behind error 0.000 rad, 5.0 m
 PASS  camera-relative WASD: W hops toward "into the screen" for two different camera headings  | alignment 1.000, 1.000
-PASS  camera-relative WASD: the frog first turns smoothly toward the move direction (90 deg here), then hops  | turn 0.55 -> 2.12 rad, 24 in-between headings before the hop
+PASS  camera-relative WASD: the frog first turns smoothly toward the move direction (90 deg here), then hops  | turn 0.55 -> 2.12 rad, 23 in-between headings before the hop
 PASS  camera: mouse drag orbits round the frog; ~1.6 s after release it swings back behind  | behind error 2.04 -> 0.028 rad
 PASS  camera: right-button drag also orbits; with 自动回正 off the camera stays where it was put  | -1.70 / -2.17 rad
 PASS  camera collision: dragged as low as it goes, the camera stays above the water / lily pads (no clipping, no surface jitter)  | camera y 0.30
@@ -33,10 +33,10 @@ PASS  headlamp: rides with the crown / head while croaking  | crown offset 0.039
 PASS  minimap layers: registry has 环境地图 / 生物雷达 / 关闭, default = 环境地图 and its name is shown on the map  | ['env', 'radar', 'off'], label "环境地图 · B"
 PASS  minimap 环境地图: no creatures at all (no turtles / fish / birds drawn)  | 0 creature icons
 PASS  minimap 生物雷达 (B): only large animals - every turtle + visible egrets/night herons, never the fish schools  | 12 turtles, 3 big birds, 0 fish
-PASS  minimap 生物雷达: turtle blips are really drawn (bright green on the radar), under-water ones translucent  | blips ['123,163,82', '57,103,46', '61,105,45']
+PASS  minimap 生物雷达: turtle blips are really drawn (bright green on the radar), under-water ones translucent  | blips ['95,140,63', '71,122,51', '31,71,25']
 PASS  minimap 关闭 (B again): the map is hidden, a small button brings it back
 PASS  minimap: on-map button cycles the layers too (show -> 环境地图, click -> 生物雷达)  | env -> radar
-PASS  turtles: more of them, around the start pad where the player meets them  | 12 turtles, 11 within 6 m of the start
+PASS  turtles: more of them, around the start pad where the player meets them  | 12 turtles, 9 within 6 m of the start
 PASS  minimap / hint: swimming up to a creature shows an on-screen hint  | hint "🐢 附近有一只乌龟", toast "🐢 附近有一只乌龟"
 PASS  plants: cone trees replaced by instanced reeds / cattails / willows / dawn redwoods / shrubs  | Reeds 760, ReedPlumes 195, Cattails 64, WillowTrunks 12, WillowCrowns 12, WillowStrands 12, MetasequoiaTrunks 26, MetasequoiaCrowns 26, BankShrubs 80
 PASS  fog fix (rain): fog colour on screen matches the sky horizon (far trees fade into the sky, not white)  | fog ['0.46', '0.48', '0.50'] vs horizon ['0.45', '0.48', '0.50'], sky fog 0.42
@@ -44,11 +44,12 @@ PASS  fog fix (fog): fog colour on screen matches the sky horizon (far trees fad
 PASS  lightning: clearly visible bolt (bright ribbon + glow) with a scene flash; debug hold freezes the frame  | core 1.00, glow 0.50, flash 1.00
 PASS  lightning: debug switch forces strikes in any weather (?bolt=1 / panel ⚡ / __pond.forceBolt)  | 2 strikes in 4 s under a clear sky
 PASS  desktop: no console errors / no HTTP errors  | []
-PASS  C2: same camera heading -> W moves the same screen direction on land and in the water (<5 deg)  | land 0.0 deg, water -0.0 deg rel. to the camera (water swim 2.01 m)
+PASS  C2: same camera heading -> W moves the same screen direction on land and in the water (<5 deg)  | land 0.0 deg, water -0.0 deg rel. to the camera (water swim 2.03 m)
 PASS  C2: same camera heading -> D moves the same screen direction on land and in the water (<5 deg)  | land -90.0 deg, water -90.0 deg rel. to the camera (water swim 2.01 m)
 PASS  C2: S in the water turns the frog round and swims toward the camera (not tank back-pedal)  | travel -2.1 deg from "toward camera", frog faces -3.5 deg off
-PASS  C2: under water, W swims level - it never dives on its own (only Shift/E dive, Space/Q rise)  | y start -1.47, lowest -1.47
-PASS  C2: diving in from a lily pad keeps the heading and the camera moves smoothly (no flip, no jump)  | largest per-frame turn 0.00 rad, largest camera step 0.09 m
+PASS  C2: under water, W swims level - it never dives on its own (only Shift/E dive, Space/Q rise)  | y start -1.48, lowest -1.47
+PASS  C2: diving in from a lily pad keeps the heading and the camera moves smoothly (no flip, no jump)  | largest per-frame turn 0.00 rad, largest camera step 0.08 m
+PASS  C2: the panel explains the controls in one sentence (same on land and in water, separate rise/dive keys)  | 操控：陆地、水面、水下都一样——W/↑ 朝屏幕前方，S/↓ 转身朝镜头走，A/D
 PASS  C2: no page errors  | []
 PASS  birds: modelled, not placeholders - lathe bodies, tube S-necks, shaped notched wings, jointed legs (>= 10 parts each)  | egret 17 parts (CylinderGeometry/LatheGeometry/ShapeGeometry/SphereGeometry/TubeGeometry); egret 17 parts (CylinderGeometry/LatheGeometry/ShapeGeometry/SphereGeometry/TubeGeometry)
 PASS  birds: at night the night herons (夜鹭) stand in the reeds, egrets are away  | 2 herons landed
@@ -56,21 +57,21 @@ PASS  birds: by day egrets (白鹭) wade in the shallows, the night herons have 
 PASS  birds: little grebes (小䴙䴘) swim on the water  | swim y -0.04, swim y -0.04
 PASS  birds: egrets forage - the neck dips down to peck  | max neck pitch 1.25 rad
 PASS  birds: the frog comes close -> the egret flies off with an alarm call and wing beats  | state fly, flee +1, wings +1, calls +1
-PASS  birds: wings really flap in flight  | wing angle -0.80 .. 1.07 rad
+PASS  birds: wings really flap in flight  | wing angle -0.80 .. 1.08 rad
 PASS  birds: after flying off, the egret circles back and lands in the reeds again  | state stand
 PASS  birds: in rain they shelter in the reeds (crouch, move back into the reed bed)  | moved back ['0.9', '0.9', '0.9'] m
 PASS  trees: every pond-side plant material uses the silhouette fog
 PASS  trees (rain): far trees stay darker silhouettes against the sky, not washed white  | 10 far trees, sky - tree luminance ['0.24', '0.25', '0.24', '0.19', '0.19', '0.26']
 PASS  trees (fog): far trees stay darker silhouettes against the sky, not washed white  | 10 far trees, sky - tree luminance ['0.17', '0.15', '0.13', '0.15', '0.07', '0.15']
-PASS  lightning: the captured storm frame really contains the bolt (many near-white pixels)  | 8155 near-white pixels
+PASS  lightning: the captured storm frame really contains the bolt (many near-white pixels)  | 4734 near-white pixels
 PASS  birds / trees page: no console errors  | []
 PASS  phone 390x844: first tap unlocks audio (equal-power panning on phones)  | ctx running
 PASS  phone: follow camera behind the frog
-PASS  phone: swiping on the scene orbits the camera, then it recenters  | -1.04 -> -0.027 rad
+PASS  phone: swiping on the scene orbits the camera, then it recenters  | -1.04 -> -0.029 rad
 PASS  phone: D-pad ▲ hops toward the camera's forward direction  | moved 2.00 m
 PASS  phone: HUD 🔊 button mutes / unmutes
 PASS  phone: creature radar shows the turtles (fewer on phones), never fish  | 9 icons
 PASS  phone: the minimap layer button is big enough to tap  | 24x24 px
 PASS  phone: no console errors / no HTTP errors  | []
 
-RESULT: ALL PASS (74 checks)
+RESULT: ALL PASS (75 checks)
