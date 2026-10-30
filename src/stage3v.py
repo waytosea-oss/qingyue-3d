@@ -189,7 +189,7 @@ tcol=olive[None,None]*(0.88+0.18*tw[...,None]); tcol=tcol*(1-tst[...,None])+thre
 tcol*=(1-0.18*S((0.03-bd)/0.03))[...,None]
 save('qingyue_vest_trim_basecolor',tcol**2.2); save('qingyue_vest_trim_roughness',0.8+0.08*(tw-0.5)-0.1*tst,gamma=False)
 save('qingyue_vest_trim_normal',normal_from(0.5*tw+1.4*tst-0.8*S((0.03-bd)/0.03),3.0),gamma=False)
-# --- badge texture: embroidered round patch, leaf + 凤凰岛科普 (no brand logos)
+# --- badge texture: embroidered round patch (v11b: 启格科普 seal, option C; was leaf + 凤凰岛科普)
 # badge texture is drawn by vest_badge.py (venv: PIL) before this stage
 assert os.path.exists(TEX+'qingyue_vest_badge.png')
 fab=tex_mat('Qingyue_Vest_Fabric','qingyue_vest_basecolor.png','qingyue_vest_roughness.png','qingyue_vest_normal.png')

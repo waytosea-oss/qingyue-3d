@@ -1,5 +1,18 @@
 # 青跃三维 · 更新记录
 
+## v11b · 2026-10-30
+
+分支 `v11b-qige-badge`（未合并 main）。只改了马甲上的圆形布贴，其它都没动（动物、操作、声音，以及页面底部 #hint 里的「凤凰岛科普 IP」文字都保持原样）。
+
+### 马甲布贴改为「启格科普」印章（方案 C）
+- 布贴从「树叶 + 凤凰岛科普」换成启格印章新标 + 「启格科普」：深绿圆底 RGB(52,84,44)，米白 RGB(240,232,198) 的印章和文字，单色刺绣效果，不用红色。背后的大布贴和胸前的小布贴用的是同一个材质，两处都已更新。
+- 用的是 Tilo 选定的成品图（512×512，尺寸和版式与旧图相同），存放在 `src/art/qingyue_vest_badge_qige_C.png`。`src/vest_badge.py` 改为直接把这张图拷贝到 `textures/`、`fbx/qingyue.fbm/` 和 project 的贴图目录，重跑脚本得到的就是新布贴。
+- `qingyue.glb`：新增脚本 `src/glb_badge.py`，只替换 glb 里内嵌的 `qingyue_vest_badge` 图像（512² JPEG），没有重新导出。其余 bufferView 经逐字节比对没有变化，所以网格、UV、蒙皮、动作、法线/粗糙度贴图以及布贴的尺寸和位置都和原来一样。`qingyue-3d.html` 和 `qingyue-pond.html` 读取的都是这个 glb，两个页面同时生效。FBX 引用的是外部的 `qingyue.fbm/` 贴图，已经一并替换。`qingyue.blend` 引用 project 贴图目录里的文件，那里也已更新，所以用 `run_all.sh` 全量重建时同样会导出新布贴。
+- 截图：`screens-v11b/back_badge_day.png`（白天，背面近景）、`back_badge_night_headlamp.png`（夜晚开头灯）、`back_badge_viewer.png`（qingyue-3d.html 背面）。截图脚本是 `src/shots_v11b.py`，拍摄时临时隐藏了 #hint（页面本身没有改动）。
+
+### 测试
+- `test_pond` 29/29、`test_v9` 41/41、`test_v10` 75/75、`test_v11` 34/34，全部通过。第一次跑 v11 时有 1 项没过：白鹭头部动作幅度测到 0.04 m，阈值是 0.05 m。这项与布贴无关，是随机时序造成的，重跑后通过。报告放在 `screens-v11b/`。
+
 ## v11 · 2026-10-29
 
 分支 `v11-features`（未合并 main）。入口仍是 `qingyue-pond.html`。v8–v10 的全部功能和用户偏好都保留：三种模式、嘴部只上下开合（嘴角零横移）、鸣囊居中大鼓起、跟随镜头与统一的镜头相对操控、环境地图 / 生物雷达（B）、音效音乐（K 静音）、藤冠头灯等。本版没有新增快捷键。
