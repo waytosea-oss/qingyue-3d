@@ -101,7 +101,10 @@ async def desktop(b):
     await pg.keyboard.press('n'); await pg.wait_for_timeout(4500); k=await at(pg)
     check('time of day: dusk = low warm sun, a few stars, fireflies return',k['tod']=='dusk' and k['keyDirY']<0.2 and 0<k['stars']<0.5 and k['ff'],'sun height %.2f'%k['keyDirY'])
     await shot(pg,'dusk_v9.png')
-    await pg.keyboard.press('n'); await pg.wait_for_timeout(4500); k=await at(pg)
+    await pg.keyboard.press('n')
+    for _ in range(40):   # poll (the 2.5 s cross-fade must finish; a fixed sleep was flaky on slow machines)
+        await pg.wait_for_timeout(250); k=await at(pg)
+        if k['tod']=='night' and k['moon'] and k['stars']>0.8 and k['ff']: break
     check('time of day: back to night keeps the moon, stars and fireflies',k['tod']=='night' and k['moon'] and k['stars']>0.8 and k['ff'])
     clear=k['fogD']
     await pg.keyboard.press('g'); await pg.wait_for_timeout(4000); k=await at(pg)

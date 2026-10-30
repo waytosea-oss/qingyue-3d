@@ -1,22 +1,22 @@
 PASS  minimap: shown by default on desktop, round, inside the viewport  | [16, 560, 204, 748]
-PASS  minimap: pond boundary + all lily pads drawn (green pad pixels)  | 2620 green px on a 188 px canvas
+PASS  minimap: pond boundary + all lily pads drawn (green pad pixels)  | 2892 green px on a 188 px canvas
 PASS  minimap: frog marker follows the frog in real time  | 3.3 px
-PASS  minimap: view fan (camera direction + FOV, radius = visibility) drawn  | 2660 fan px, radius 14.0 m
+PASS  minimap: view fan (camera direction + FOV, radius = visibility) drawn  | 3469 fan px, radius 14.0 m
 PASS  minimap: zoom in / out buttons
 PASS  minimap: M collapses (leaves a small 地图 button) and restores
-PASS  headlamp: modelled lamp body parented to the head bone  | parent head, 10 meshes
+PASS  headlamp: modelled lamp body parented to the head bone  | parent head, 13 meshes
 PASS  headlamp: L switches the SpotLight + visible beam on  | intensity 6.0
-PASS  headlamp: follows the head bone while animating (rigid offset, lamp moves)  | head offset 0.3895..0.3897 m, lamp moved 0.215 m
-PASS  headlamp: works under water (stronger beam)  | y -1.89, intensity 9.0
+PASS  headlamp: follows the head bone while animating (rigid offset, lamp moves)  | head offset 0.3685..0.3691 m, lamp moved 0.216 m
+PASS  headlamp: works under water (stronger beam)  | y -1.57, intensity 9.0
 PASS  headlamp: L switches it off again
 PASS  fish: 3 species, schools, detailed bodies (not placeholder boxes)  | 鲫鱼 x10 (722 verts), 麦穗鱼 x24 (722 verts), 鳑鲏 x18 (722 verts)
-PASS  fish: schools swim around (positions + tail-beat clock advance)  | school moves 0.40, 0.26, 0.28 m
-PASS  fish: stay inside the water (floor -1.9 .. surface 0)  | -1.33..-0.90, -0.91..-0.24, -0.98..-0.60
-PASS  fish: school scatters away from the frog  | mean distance 1.02 -> 1.37 m
-PASS  turtles: one crawls on the floor, one swims, they move  | moved 0.21, 0.36, 0.21 m
+PASS  fish: schools swim around (positions + tail-beat clock advance)  | school moves 0.27, 0.23, 0.09 m
+PASS  fish: stay inside the water (floor -1.9 .. surface 0)  | -1.31..-0.78, -1.49..-0.35, -1.33..-0.59
+PASS  fish: school scatters away from the frog  | mean distance 0.81 -> 1.30 m
+PASS  turtles: one crawls on the floor, one swims, they move  | moved 0.21, 0.36, 0.21, 0.21, 0.36, 0.21, 0.36, 0.19, 0.36, 0.36, 0.21, 0.21 m
 PASS  turtles: legs animate (crawl / paddle)
 PASS  turtles: startled by the frog -> pulls head and legs in  | retract 1.00
-PASS  time of day: N cycles night -> day with a smooth cross-fade  | day weight 0.47 after 1.2 s, 1.00 after 3.7 s
+PASS  time of day: N cycles night -> day with a smooth cross-fade  | day weight 0.48 after 1.2 s, 1.00 after 3.7 s
 PASS  time of day: day = bright blue sky, high sun key light, no stars / moon / fireflies  | sky 0.74 vs 0.11
 PASS  time of day: dragonflies fly by day (and avoid the frog)  | 6 dragonflies
 PASS  time of day: dusk = low warm sun, a few stars, fireflies return  | sun height 0.10
@@ -26,14 +26,14 @@ PASS  weather: rain = falling streaks + ripple rings on the water  | 2400 drops,
 PASS  weather: fog lowers visibility (fog density x5+)  | density 0.113 vs clear 0.022
 PASS  weather: minimap view fan shrinks with the fog  | radius 10.6 m vs 14.0 m clear
 PASS  weather: snow = drifting flakes  | 1600 flakes
-PASS  weather: storm = heavy rain + lightning flashes (+ optional thunder)  | 1 strikes, max flash 0.85
+PASS  weather: storm = heavy rain + lightning flashes (+ optional thunder)  | 1 strikes, max flash 0.61
 PASS  headlamp: usable in all 18 time x weather combinations  | []
 PASS  daytime underwater still uses the dense underwater fog  | fog 0.20
 PASS  desktop: no console errors / no HTTP errors  | []
 PASS  phone 390x844: mobile tier (low particle quality, fewer fish)  | quality low, 26 fish
 PASS  phone: on-screen D-pad + up/down buttons shown
 PASS  phone: minimap starts collapsed so it never covers the controls
-PASS  phone: expanded minimap does not overlap the D-pad, action buttons or HUD  | minimap [262, 179, 380, 297]
+PASS  phone: expanded minimap does not overlap the D-pad, action buttons or HUD  | minimap [262, 139, 380, 257]
 PASS  phone: minimap zoom buttons work by touch
 PASS  phone: holding ▲ on the D-pad hops the frog  | moved 2.00 m
 PASS  phone: 头灯 button toggles the headlamp
