@@ -129,15 +129,16 @@ async def desktop(b):
     check('animation: egret neck / head pose changes over time (stand, look around, peck)',span>0.05,'head moved %.2f m relative to the feet'%span)
     e0=(await v11(pg))['events']; await wait(pg,9000); e1=(await v11(pg))['events']
     check('egret: wades slowly through the shallows while foraging (leg steps)',e1['egretStep']>e0['egretStep'],'+%d steps in 9 s'%(e1['egretStep']-e0['egretStep']))
-    # kingfisher: forced plunge -> fish in the bill -> back to the perch -> beats + swallows it
+    # kingfisher: forced plunge -> fish in the bill -> back to the perch -> beats + swallows it (start from an idle bird on its twig)
+    await until(pg,lambda v:any(x['kind']=='kingfisher' and x['state']=='perch' and not x['prey'] and x['eatT']==0 for x in v['birds']),20); e1=(await v11(pg))['events']
     await pg.evaluate("window.__pond.kfDive(true)")
     v=await until(pg,lambda v:v['events']['kfCatch']>e1['kfCatch'],6)
     kf=next(x for x in v['birds'] if x['kind']=='kingfisher')
     check('kingfisher: plunges into the water and comes up with a fish in its bill (catch event)',v['events']['kfDive']>e1['kfDive'] and v['events']['kfCatch']>e1['kfCatch'] and kf['prey'],
           'dives +%d, catches +%d, fish in bill %s'%(v['events']['kfDive']-e1['kfDive'],v['events']['kfCatch']-e1['kfCatch'],kf['prey']))
-    v=await until(pg,lambda v:next(x for x in v['birds'] if x['kind']=='kingfisher')['eatT']>0,5); ki=next(i for i,x in enumerate(v['birds']) if x['kind']=='kingfisher'); kf=v['birds'][ki]
+    v=await until(pg,lambda v:next(x for x in v['birds'] if x['kind']=='kingfisher')['eatT']>0,10); ki=next(i for i,x in enumerate(v['birds']) if x['kind']=='kingfisher'); kf=v['birds'][ki]
     await closeup(pg,kf['x'],kf['y'],kf['z'],0.75,0.14,back=1.4,side=0.3,face=ki,up=0.08); await shot(pg,'kingfisher_with_fish.png')
-    v=await until(pg,lambda v:v['events']['kfEat']>e1['kfEat'],6); kf=next(x for x in v['birds'] if x['kind']=='kingfisher')
+    v=await until(pg,lambda v:v['events']['kfEat']>e1['kfEat'],15); kf=next(x for x in v['birds'] if x['kind']=='kingfisher')   # game time is clamped per frame: slow headless frames stretch the 2.8 s meal
     check('kingfisher: flies back to its twig, beats the fish and swallows it (eat event, fish gone)',v['events']['kfEat']>e1['kfEat'] and not kf['prey'] and kf['state']=='perch','state %s, fish %s'%(kf['state'],kf['prey']))
     v=await until(pg,lambda v:v['events']['grebeDive']>e1['grebeDive'] and v['events']['grebeUp']>e1['grebeUp'],40)
     check('little grebe: dives (tips forward, slips under) and pops up again',v['events']['grebeDive']>e1['grebeDive'] and v['events']['grebeUp']>e1['grebeUp'],
