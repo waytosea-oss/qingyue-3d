@@ -1,0 +1,36 @@
+PASS  files: one glb per animal, each < 1.5 MB (WebP textures)  | turtle 1391 KB, egret 1172 KB, heron 1115 KB, kingfisher 884 KB, grebe 851 KB
+PASS  files: no blend / fbx / zip / loose png sources next to the runtime models  | []
+PASS  loading: all five models load (turtle, egret, night heron, kingfisher, little grebe), no errors  | {'turtle': True, 'egret': True, 'heron': True, 'kingfisher': True, 'grebe': True} {}
+PASS  budget: LOD0 <= 20k triangles per animal (body + feathers + eyes / + shell), LOD1 <= 6k  | turtle 19192/5464, egret 17744/2800, heron 17024/2800, kingfisher 11984/1800, grebe 12176/1800
+PASS  budget: textures <= 1024 px (baked colour / normal / roughness; shared feather atlas)  | 26 textures
+PASS  models: skinned bodies + LOD1 on every animal, feather cards with a "fold" morph on every bird, a separate carapace on the turtle  | turtle: body,body_LOD1,eyes,shell,shell_LOD1; egret: body,body_LOD1,eyes,feathers; heron: body,body_LOD1,eyes,feathers; kingfisher: body,body_LOD1,eyes,feathers; grebe: body,body_LOD1,eyes,feathers
+PASS  scene: every turtle and every bird uses the v11 model  | 14 turtles, 9 birds
+PASS  animation: turtle limbs move (paddling / crawling, bones driven every frame)  | max foot move 0.347 m
+PASS  LOD: near turtles use LOD0, far ones LOD1 (desktop switch at 5.5 m)  | LOD0 4, LOD1 10
+PASS  turtle: some bask on lily pads near the start (head up, legs splayed)  | pad y 0.03, pad y 0.04
+PASS  turtle: startled on the pad -> slides into the water (splash + plop) and swims off under water  | state swim, y -0.36, plop sounds +1
+PASS  turtle: when the frog has gone it swims back and climbs onto its pad again  | state pad
+PASS  turtle: comes up to breathe - snout up, the head breaks the surface while the shell stays just under  | pitch -0.19, head y -0.01, body y -0.18
+PASS  turtle: startled -> head pulled back into the shell (head bone moves in), legs drawn in  | retract 1.00, head 0.36 -> 0.22 m from the body origin
+PASS  egret: lands by day and is rendered close up (screenshot egret_day.png)
+PASS  kingfisher: lands by day and is rendered close up (screenshot kingfisher_day.png)
+PASS  grebe: lands by day and is rendered close up (screenshot grebe_day.png)
+FAIL  animation: egret neck / head pose changes over time (stand, look around, peck)  | head moved 0.04 m relative to the feet
+PASS  egret: wades slowly through the shallows while foraging (leg steps)  | +25 steps in 9 s
+PASS  kingfisher: plunges into the water and comes up with a fish in its bill (catch event)  | dives +1, catches +1, fish in bill True
+PASS  kingfisher: flies back to its twig, beats the fish and swallows it (eat event, fish gone)  | state perch, fish False
+PASS  little grebe: dives (tips forward, slips under) and pops up again  | dives +1, surfacings +1
+PASS  egret: flees - wings unfold (feather fold morph -> 0) and really beat (wing-tip bone swings up and down)  | fold 0.07, wing tip height range 0.44 m
+PASS  egret: circles back, glides in and lands in the reeds again with folded wings  | state stand, fold 0.95
+PASS  night heron: arrives at night and stands hunched in the reeds
+PASS  night heron: its eyes shine red in the headlamp beam (eyeshine from the pupil)  | shine 1.00
+PASS  night heron: ambush strike - the hunched neck shoots out  | head moved 0.32 m
+PASS  rain: animals get the wet look (glossier shell / skin, darker feathers)  | wet 1.00
+PASS  radar: still only large animals - every turtle (incl. the baskers) and the big birds, never fish  | 14 turtle icons for 14 turtles
+PASS  desktop page: no console errors  | []
+PASS  comparison: v10 and v11 close-ups rendered side by side (compare_v10_v11_*.png)
+PASS  comparison pages: no console errors (v10 fallback still works)  | [[], []]
+PASS  phone: all models load; LOD switches closer (turtle 3.2 m) and fewer animals  | 8 turtles, 6 birds, LOD0/LOD1 turtles [0, 8]
+PASS  phone 390x844: runs with the new animals, no console errors  | 60 fps headless; []
+
+33 / 34 passed
