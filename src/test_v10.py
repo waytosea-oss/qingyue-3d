@@ -297,9 +297,12 @@ async def birds_trees(b):
         s=await st(pg); a=math.atan2(bd['z'],bd['x']); dx,dz=bd['x']-s['x'],bd['z']-s['z']
         await pg.evaluate("window.__pond.camLook(%f,%f,%f,%f,%f,%f,%d)"%(dx-math.cos(a)*dist+math.sin(a)*side,h,dz-math.sin(a)*dist-math.cos(a)*side,dx,bd['y']-s['y']-0.1,dz,fov))
     info=await pg.evaluate("window.__pond.birdModels()")
-    check('birds: modelled, not placeholders - lathe bodies, tube S-necks, shaped notched wings, jointed legs (>= 10 parts each)',
-          all(m['meshes']>=10 and 'LatheGeometry' in m['types'] and 'TubeGeometry' in m['types'] and 'ShapeGeometry' in m['types'] for m in info if m['kind'] in ('egret','heron')),
-          '; '.join('%s %d parts (%s)'%(m['kind'],m['meshes'],'/'.join(sorted(set(m['types'])))) for m in info[:2]))
+    # v11 replaced the procedural birds (lathe / tube / shape parts) with skinned Blender models; either counts as "modelled, not placeholders"
+    v10ok=lambda m:m['meshes']>=10 and 'LatheGeometry' in m['types'] and 'TubeGeometry' in m['types'] and 'ShapeGeometry' in m['types']
+    v11ok=lambda m:m.get('v11') and m['skinned']>=3 and m['tris']>=8000
+    check('birds: modelled, not placeholders - v10 lathe/tube/shape parts or v11 skinned Blender models (body + LOD + feathers + eyes)',
+          all(v10ok(m) or v11ok(m) for m in info if m['kind'] in ('egret','heron')),
+          '; '.join('%s %s'%(m['kind'],'v11 skinned %d meshes, %d tris'%(m['skinned'],m['tris']) if m.get('v11') else '%d parts (%s)'%(m['meshes'],'/'.join(sorted(set(m['types']))))) for m in info[:2]))
     # night: night herons roost in the reeds, no egrets
     await pg.evaluate("window.__pond.setTod('night',true);window.__pond.setWeather('clear',true)")
     bs=await wait_birds(lambda bs:any(x['kind']=='heron' and x['state'] in ('stand','forage') for x in bs) and not any(x['kind']=='egret' and x['visible'] for x in bs))

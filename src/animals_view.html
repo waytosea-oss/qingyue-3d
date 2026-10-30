@@ -1,0 +1,24 @@
+<!doctype html>
+<!-- v11 dev viewer for animals/*.glb, uses the same rig as the pond: ?k=egret&yaw=40&pitch=10&dist=1.6&lod=0&night=0&p={"neck":{"ret":1}}  (serve the repo root, open /src/animals_view.html) -->
+<html><head><meta charset="utf-8"><style>html,body{margin:0;background:#8aa;overflow:hidden}</style>
+<script type="importmap">{"imports":{"three":"../vendor/three/build/three.module.min.js","three/addons/":"../vendor/three/addons/"}}</script></head>
+<body><script type="module">
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
+import * as RIG from '../animals/rig.js';
+const q=new URLSearchParams(location.search),K=q.get('k')||'egret',night=q.get('night')==='1';
+const r=new THREE.WebGLRenderer({antialias:true});r.setSize(innerWidth,innerHeight);r.setPixelRatio(1);r.toneMapping=THREE.ACESFilmicToneMapping;r.outputColorSpace=THREE.SRGBColorSpace;document.body.appendChild(r.domElement);
+const sc=new THREE.Scene();sc.background=new THREE.Color(night?0x0a1018:0x9fb8c0);
+const pm=new THREE.PMREMGenerator(r);sc.environment=pm.fromScene(new RoomEnvironment(),0.04).texture;sc.environmentIntensity=night?0.05:0.5;
+const sun=new THREE.DirectionalLight(0xfff2dd,night?0.0:2.4);sun.position.set(2,3,2);sc.add(sun);
+if(night){const sp=new THREE.SpotLight(0xfff0d0,30,8,0.4,0.4,1.2);sp.position.set(0.6,0.9,1.6);sc.add(sp);sc.add(sp.target);}
+sc.add(new THREE.HemisphereLight(0xcfe4ff,0x405030,night?0.05:0.6));
+const src=(await RIG.loadAnimals(new GLTFLoader(),'../animals/',{}))[K];
+const I=RIG.instance(src);sc.add(I.root);RIG.setLod(I,+(q.get('lod')||0));
+const P=JSON.parse(q.get('p')||'{}');(K==='turtle'?RIG.poseTurtle:RIG.poseBird)(I,P);I.root.updateMatrixWorld(true);
+const box=new THREE.Box3().setFromObject(I.root,true),c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3()).length();
+const cam=new THREE.PerspectiveCamera(30,innerWidth/innerHeight,sz*0.01,sz*20);const yaw=(+(q.get('yaw')||40))*Math.PI/180,pit=(+(q.get('pitch')||10))*Math.PI/180,d=sz*(+(q.get('dist')||1.6));
+cam.position.set(c.x+Math.sin(yaw)*Math.cos(pit)*d,c.y+Math.sin(pit)*d,c.z+Math.cos(yaw)*Math.cos(pit)*d);cam.lookAt(c);
+r.render(sc,cam);window.__info={info:src.info,bones:Object.keys(I.bones)};window.__done=true;
+</script></body></html>
