@@ -176,7 +176,7 @@ def smooth_cols(v,f,c,iters):
     A=sparse.diags(1/np.asarray(A.sum(1)).ravel())@A
     for _ in range(iters):c=A@c
     return c
-def seat_eye(B,meta,sink=0.38):
+def seat_eye(B,meta,sink=0.1):
     """push the eyeball into the head so only a cap shows (otherwise the far eye pokes through the head silhouette)"""
     e=meta['eye'];c=e['c'];xs=float(body_surface_x(B,np.array([c[1]]),np.array([c[2]]))[0])
     e['c']=[xs-sink*e['r'],c[1],c[2]];return meta
@@ -687,7 +687,7 @@ def turtle():
            'fleg':['root','fl_up.L','fl_lo.L','fl_ft.L','fl_up.R','fl_lo.R','fl_ft.R'],'hleg':['root','hl_up.L','hl_lo.L','hl_ft.L','hl_up.R','hl_lo.R','hl_ft.R'],
            'claw':['fl_ft.L','fl_ft.R','hl_ft.L','hl_ft.R'],'tail':['tail','root']}
     np.savez_compressed(OUT+'/turtle.npz',v=v,f=f,col=c.astype(np.float32),fmask=fm.astype(np.float32),flow=fl.astype(np.float32),part=parts,sv=sv,sf=sf,suv=suv)
-    json.dump(dict(bones=bones,meta=seat_eye(B,dict(partBones=partb,eye=dict(c=[0.0245,0.093,0.312],r=0.0078,iris=[0.62,0.6,0.22],pupil=0.5)),0.3)),open(OUT+'/turtle.json','w'),indent=1)
+    json.dump(dict(bones=bones,meta=seat_eye(B,dict(partBones=partb,eye=dict(c=[0.0245,0.093,0.312],r=0.0078,iris=[0.62,0.6,0.22],pupil=0.5)),0.15)),open(OUT+'/turtle.json','w'),indent=1)
 
 if __name__=='__main__':
     kinds=sys.argv[1:] or ['turtle','egret','heron','kingfisher','grebe']

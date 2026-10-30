@@ -228,7 +228,7 @@ def build(kind):
     bpy.data.materials.remove(tmp)
     arm['legLen']=meta.get('legLen',0)
     path=os.path.join(OUTD,kind+'.glb');select_only(arm,*objs)
-    bpy.ops.export_scene.gltf(filepath=path,export_format='GLB',use_selection=True,export_skins=True,export_morph=True,export_morph_normal=False,export_animations=False,
+    bpy.ops.export_scene.gltf(filepath=path,export_format='GLB',use_selection=True,export_skins=True,export_morph=True,export_morph_normal=True,export_animations=False,
         export_image_format='WEBP',export_image_quality=cfg.get('q',82),export_vertex_color='ACTIVE',export_extras=True,export_yup=True,export_apply=False,export_tangents=False)
     tris={o.name:sum(len(p.vertices)-2 for p in o.data.polygons) for o in objs}
     print('OK',kind,'%.0f KB'%(os.path.getsize(path)/1024),tris,'%.0fs'%(time.time()-t0),flush=True)

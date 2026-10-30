@@ -111,6 +111,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+import * as RIG from './animals/rig.js';
 const $=s=>document.querySelector(s);
 const toast=(t,ms=2200)=>{const e=$('#toast');e.textContent=t;e.style.opacity=1;clearTimeout(e._t);e._t=setTimeout(()=>e.style.opacity=0,ms)};
 // ---------- v8 renderer / night pond scene
@@ -331,6 +332,8 @@ const vestMeshes=[];let model,mixer,bones={},restQ=new Map(),bodyMesh,lidL,lidR,
 const ONE=new Set(['jump','hop_forward','wave','croak','happy_spin','look_around']);
 const ACTS=[['idle','待机'],['sit_hug','抱膝坐'],['jump','跳跃'],['hop_forward','向前蹦'],['wave','挥手'],['talk','说话'],['croak','鸣叫'],['happy_spin','开心转圈'],['look_around','东张西望'],['sleep','打瞌睡']];
 const loader=new GLTFLoader();
+// v11: detailed animals load in parallel with the frog; the pond's creatures are built once both are in (?animals=v10 keeps the old procedural ones)
+let ANIM={};const ANIM_P=new URLSearchParams(location.search).get('animals')==='v10'?Promise.resolve({}):RIG.loadAnimals(new GLTFLoader(),'animals/',{mobile:IS_MOBILE,rim:addRim});
 loader.load('qingyue.glb',g=>{
  model=g.scene;frog.add(model);
  model.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false;
@@ -353,9 +356,10 @@ loader.load('qingyue.glb',g=>{
  mixer=new THREE.AnimationMixer(model);
  for(const c of g.animations){const a=mixer.clipAction(c);actions[c.name]=a;if(ONE.has(c.name)){a.setLoop(THREE.LoopOnce);a.clampWhenFinished=true}}
  mixer.addEventListener('finished',e=>{if(e.action!==cur)return;const n=e.action.getClip().name;if(n==='hop_forward'){rootMotion()}else play(baseLoop,0.35)});
- play('idle',0);buildUI();resetFrog();initV9();
- $('#load').style.opacity=0;setTimeout(()=>$('#load').remove(),700);
- window.__ready=true;
+ play('idle',0);buildUI();resetFrog();
+ ANIM_P.then(a=>{ANIM=a;initV9();
+  $('#load').style.opacity=0;setTimeout(()=>$('#load').remove(),700);
+  window.__ready=true});
 },e=>{if(e.total)$('#bar').style.width=(e.loaded/e.total*100)+'%'},err=>{$('#load b').textContent='模型加载失败：请通过网页服务器打开（见说明.txt）';console.error(err)});
 const B=n=>bones[n]||bones[n.replace('.','')];
 // ---------- 安全限位（v3）：骨骼角度与口型形变的上限
@@ -805,7 +809,7 @@ function shellTexture(){return noiseTex(512,(x,s)=>{x.fillStyle='#3d3b22';x.fill
  for(let k=0;k<26;k++){const t=k/26*Math.PI*2,t2=(k+1)/26*Math.PI*2;const R1=0.44,R2=0.5;sc([[0.5+Math.cos(t)*R1,0.5+Math.sin(t)*R1],[0.5+Math.cos(t)*R2,0.5+Math.sin(t)*R2],[0.5+Math.cos(t2)*R2,0.5+Math.sin(t2)*R2],[0.5+Math.cos(t2)*R1,0.5+Math.sin(t2)*R1]],['#5a5630','#454122','#2e2c16'])}})}
 let SHELL_TEX=null;
 function limbGeo(len,r0,r1){const pts=[];for(let i=0;i<=10;i++){const t=i/10;pts.push(new THREE.Vector2(lerp(r0,r1,t)*(1+0.25*Math.sin(Math.PI*t)),t*len))}const g=new THREE.LatheGeometry(pts,14);g.scale(1,1,0.62);return g}
-function buildTurtle(swimmer){const T=new THREE.Group();T.name='Turtle';
+function buildTurtle(swimmer){if(v11On('turtle'))return buildTurtleV11(swimmer);const T=new THREE.Group();T.name='Turtle';
  const skin=new THREE.MeshStandardMaterial({color:0x4b5233,roughness:0.6,vertexColors:true});
  const W=0.19,Lg=0.25,H=0.095;
  const sg=new THREE.SphereGeometry(1,56,28,0,Math.PI*2,0,Math.PI/2);const p=sg.attributes.position,uv=sg.attributes.uv;
@@ -840,8 +844,8 @@ function buildTurtles(){const spots=IS_MOBILE?[[1.6,2.2,0],[-2.2,1.2,1],[-1.2,-2
  for(const [x,z,sw] of spots){const t=buildTurtle(!!sw);t.T.position.set(x,sw?-0.95:FLOOR_Y,z);t.home=new THREE.Vector3(x,0,z);t.ph0=r9()*6.28;t.surf={state:'swim',t:5+r9()*12};scene.add(t.T);V9.turtles.push(t)}}
 function turtleDive(t){const P=t.T.position;t.surf.state='swim';t.surf.t=14+r9()*12;splash(P.x,P.z,0.55);V10.events.turtleDive++;sfx('turtle',P)}
 function turtleUpdate(dt){const L=lampInfo(),F=frog.position;
- for(const t of V9.turtles){const P=t.T.position;const fd=Math.hypot(P.x-F.x,P.z-F.z)+Math.abs(P.y-F.y)*0.5;
-  if(fd<1.5&&t.scared<=0)t.scared=3.0;                                      // startled: stop and pull the head in, then wander off
+ for(const t of V9.turtles){if(t.basker){baskerUpdate(t,dt);continue}const P=t.T.position;const fd=Math.hypot(P.x-F.x,P.z-F.z)+Math.abs(P.y-F.y)*0.5;
+  if(fd<1.5&&t.scared<=0&&!V11.calm){t.scared=3.0;V11.events.turtleRetract++}                                      // startled: stop and pull the head in, then wander off
   t.scared=Math.max(0,t.scared-dt);t.tT-=dt;
   if(t.tT<=0||Math.hypot(t.tgt.x-P.x,t.tgt.z-P.z)<0.3){const a=r9()*6.28,r=0.8+r9()*4.2;t.tgt.set(t.home.x+Math.cos(a)*r,0,t.home.z+Math.sin(a)*r);const rr=Math.hypot(t.tgt.x,t.tgt.z);if(rr>POND_R-3)t.tgt.multiplyScalar((POND_R-3)/rr);t.tT=10+r9()*10}
   let goal=t.tgt,want=t.swimmer?0.12:0.07;
@@ -853,15 +857,15 @@ function turtleUpdate(dt){const L=lampInfo(),F=frog.position;
   t.phase+=dt*(0.6+t.speed*14);const ph=t.phase;
   t.retract+=((t.scared>0?1:0)-t.retract)*Math.min(1,dt*6);t.neck.position.z=0.205-0.09*t.retract;t.neck.rotation.y=Math.sin(ph*0.37)*0.25*(1-t.retract);t.neck.rotation.x=Math.sin(ph*0.5)*0.06;
   if(L&&inBeam(P,L)&&!t.scared){const look=Math.atan2(L.o.x-P.x,L.o.z-P.z)-t.heading;t.neck.rotation.y=THREE.MathUtils.clamp(Math.atan2(Math.sin(look),Math.cos(look)),-0.7,0.7)}
-  for(const l of t.legs){if(t.swimmer){const s=Math.sin(ph*1.4+(l.front?0:Math.PI*0.6));l.piv.rotation.set(0,(l.front?0.9:0.5)*s*l.sx,(l.front?0.35:0.2)*Math.cos(ph*1.4)*l.sx)}   // paddling strokes
+  for(const l of t.legs){if(t.swimmer){const o=(l.sx*l.sz>0)?0:Math.PI,s=Math.sin(ph*1.4+o);l.piv.rotation.set(0,(l.front?0.9:0.5)*s*l.sx,(l.front?0.35:0.2)*Math.cos(ph*1.4+o)*l.sx)}   // paddling strokes, diagonal pairs alternate (v11)
    else{const s=Math.sin(ph+((l.sx*l.sz>0)?0:Math.PI));l.piv.rotation.set(0,0.55*s*l.sx*(t.speed>0.01?1:0.15),Math.max(0,Math.cos(ph+((l.sx*l.sz>0)?0:Math.PI)))*0.22*l.sx)}   // diagonal-pair crawl
    l.piv.scale.setScalar(1-0.35*t.retract)}
   if(t.swimmer){const S=t.surf;S.t-=dt;let yW=lerp(FLOOR_Y+0.5,WY-0.5,0.5+0.5*Math.sin(V9.t*0.12+t.ph0));
    if(S.state==='swim'&&S.t<=0&&fd>2.5)S.state='rise';
-   if(S.state==='rise'){yW=WY-0.07;if(P.y>WY-0.12){S.state='bask';S.t=4+r9()*4}}
-   else if(S.state==='bask'){yW=WY-0.07;if(S.t<=0||fd<2.2)turtleDive(t)}
+   if(S.state==='rise'){yW=WY-0.16;if(P.y>WY-0.19){S.state='bask';S.t=4+r9()*4;V11.events.turtleBreath++}}   // v11: snout up, head out, the shell just awash
+   else if(S.state==='bask'){yW=WY-0.16;if(S.t<=0||fd<2.2)turtleDive(t)}
    P.y+=(yW-P.y)*Math.min(1,dt*(S.state==='swim'?0.9:0.6));
-   t.T.rotation.set(Math.sin(ph*1.4)*0.04-THREE.MathUtils.clamp((yW-P.y)*0.7,-0.45,0.45),t.heading,Math.sin(ph*0.7)*0.05,'YXZ')}
+   t.T.rotation.set(Math.sin(ph*1.4)*0.04-THREE.MathUtils.clamp((yW-P.y)*0.7,-0.45,0.45)-0.3*(t.breath||0),t.heading,Math.sin(ph*0.7)*0.05,'YXZ')}
   else{P.y=FLOOR_Y+Math.abs(Math.sin(ph))*0.006*(t.speed>0.01?1:0);t.T.rotation.set(0,t.heading,Math.sin(ph)*0.03*(t.speed>0.01?1:0))}}}
 // ---------------------------------------------------------------- 3) 小地图
 function buildMinimap(){const wrap=document.createElement('div');wrap.id='mm';
@@ -1157,7 +1161,7 @@ body.touch #hudHint,body.touch #hudCommon{display:none}.hud{max-height:none}
   const up=()=>{if(!b.classList.contains('on'))return;b.classList.remove('on');send(k,false)};b.addEventListener('pointerup',up);b.addEventListener('pointercancel',up);b.addEventListener('lostpointercapture',up)})}
 initTouch();
 // ---------------------------------------------------------------- init / update / keys / UI
-function initV9(){attachHeadlamp();buildFish();buildTurtles();buildMinimap();
+function initV9(){attachHeadlamp();buildFish();buildTurtles();addBaskers();buildMinimap();
  const row=document.createElement('div');row.className='row';row.innerHTML='<label class="tog"><input type="checkbox" id="lampOn">头灯（L）</label><label class="tog"><input type="checkbox" id="mmOn">小地图（M）</label>';
  const after=$('#vestOn')&&$('#vestOn').closest('.row');if(after)after.after(row);$('#lampOn').onchange=e=>setLamp(e.target.checked);$('#mmOn').checked=V9.mm.on;$('#mmOn').onchange=e=>toggleMinimap(e.target.checked);
  const lb=document.createElement('button');lb.id='lampBtn';lb.textContent='🔦 头灯';lb.onclick=()=>setLamp(!V9.lampOn);$('#hud .modes').appendChild(lb);
@@ -1168,7 +1172,7 @@ let RDT=0;
 function v9Update(dt){V9.t+=dt;atmoUpdate(RDT||dt);if(!V9.ready)return;
  if(V9.lamp){const under=frog.position.y<WY-0.15;const want=V9.lampOn?(under?9:6):0;V9.spot.intensity+=(want-V9.spot.intensity)*Math.min(1,dt*10);V9.beamMat.uniforms.uI.value=V9.lampOn?(under?0.5:0.28):0;
   $('#lampBtn').classList.toggle('on',V9.lampOn)}
- v10Update(dt);fishUpdate(dt);turtleUpdate(dt);V9.mmT=(V9.mmT||0)-dt;if(V9.mmT<=0){V9.mmT=0.5;placeMinimap()}drawMinimap()}
+ v10Update(dt);fishUpdate(dt);turtleUpdate(dt);v11Update(dt);V9.mmT=(V9.mmT||0)-dt;if(V9.mmT<=0){V9.mmT=0.5;placeMinimap()}drawMinimap()}
 function v9State(){const L=V9.lamp;const wp=new THREE.Vector3();if(L)L.getWorldPosition(wp);const mmEl=$('#mm');const rect=mmEl&&V9.mm.on?mmEl.getBoundingClientRect():null;
  const hb=B('head'),hp=new THREE.Vector3();if(hb)hb.getWorldPosition(hp);
  return{mobile:IS_MOBILE,lamp:{on:V9.lampOn,headD:wp.distanceTo(hp),headPos:[hp.x,hp.y,hp.z],intensity:V9.spot?V9.spot.intensity:0,parent:L&&L.parent?L.parent.name:null,pos:[wp.x,wp.y,wp.z],beam:V9.beam?V9.beam.visible:false,meshes:L?L.children.filter(o=>o.isMesh).length:0},
@@ -1352,7 +1356,7 @@ function initV10UI(){const h=document.createElement('div');h.id='v10Box';
  const q=new URLSearchParams(location.search);if(q.get('cam'))setCamMode(q.get('cam'),true);if(q.get('bolt')){V10.forceBolt=true;ATMO.nextBolt=0.5;if(q.get('bolt')==='hold')V10.flashHold=true}}
 initV10UI();
 function creatureHint(){if(!V10.hint.on||!V9.ready)return;const F=frog.position;let best=null,bd=2.4;
- for(const t of V9.turtles){const d=t.T.position.distanceTo(F);if(d<bd){bd=d;best={k:'turtle',txt:t.surf&&t.surf.state==='bask'?'🐢 一只乌龟浮上来换气':'🐢 附近有一只乌龟'}}}
+ for(const t of V9.turtles){const d=t.T.position.distanceTo(F);if(d<bd){bd=d;best={k:'turtle',txt:t.basker&&t.basker.state==='pad'?'🐢 荷叶上有只乌龟在晒背':t.surf&&t.surf.state==='bask'?'🐢 一只乌龟浮上来换气':'🐢 附近有一只乌龟'}}}
  for(const set of V9.fishSets)for(const sc of set.schools){const d=sc.c.distanceTo(F);if(d<bd){bd=d;best={k:'fish:'+set.sp.name,txt:'🐟 一群'+set.sp.name+'游过'}}}
  if(!best)return;const c=V10.hint.cool;if((c[best.k]??-99)>tAll-14)return;c[best.k]=tAll;V10.hint.last=best.txt;V10.hint.lastT=tAll;toast(best.txt,1800)}
 function v10Update(dt){if(!BIRDS.length&&V9.ready)buildBirds();if(BIRDS.length)birdUpdate(dt);const WW=ATMO.wW;PLANT_WIND.value=0.05*WW.clear+0.22*WW.overcast+0.3*WW.rain+0.08*WW.fog+0.38*WW.snow+0.85*WW.storm;
@@ -1387,7 +1391,7 @@ function wingGeo(span,chord){// outline with a rounded leading edge and notched 
  const tips=6;for(let i=0;i<=tips;i++){const u=i/tips,x=span*(1-u*0.62),z=chord*(0.1+0.55*u)+chord*(i%2?0.12:0);s.lineTo(x,z)}
  s.quadraticCurveTo(span*0.2,chord*0.9,0,chord*0.75);s.lineTo(0,0);
  const g=new THREE.ShapeGeometry(s,6);g.rotateX(Math.PI/2);return g}
-function buildBird(kind){const S=BIRD_SPEC[kind],G=new THREE.Group();G.name='Bird_'+kind;
+function buildBird(kind){if(v11On(kind))return buildBirdV11(kind);const S=BIRD_SPEC[kind],G=new THREE.Group();G.name='Bird_'+kind;
  const mat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.75,side:THREE.DoubleSide,envMapIntensity:0.5});
  const L=S.len,bodyR=L*0.24;
  // body: teardrop lathe, horizontal along +Z (forward); back colour on top, belly below
@@ -1428,21 +1432,23 @@ function buildBirds(){if(!SHORE.reedSpots)return;const plan=IS_MOBILE?[['egret',
   b.G.position.copy(spotPos(b.homeA,b.homeR,b));b.G.visible=false;b.fly=null;b.yaw=b.homeA+Math.PI;scene.add(b.G);BIRDS.push(b);k++}}
 function birdActive(b){const WT=ATMO.wT;const day=WT.day+WT.dusk*0.5;return b.S.day?day>0.5:day<=0.5}
 function birdSheltering(){const WW=ATMO.wW;return WW.rain+WW.storm>0.5}
-function flapSet(b,k,ph){for(const w of b.wings){w.piv.rotation.set(0,0,w.sx*(0.15+Math.sin(ph)*0.95*k),'XYZ')}}
+function flapSet(b,k,ph){b.wingA=0.15+Math.sin(ph)*0.95*k;for(const w of b.wings){w.piv.rotation.set(0,0,w.sx*b.wingA,'XYZ')}}
 function foldSet(b){for(const w of b.wings){w.piv.rotation.set(0.06,w.sx*Math.PI/2,-w.sx*Math.PI/2*0.92,'ZYX')}}   // folded: span swung back along the body (Y), then the wing surface turned down against the flank (Z)
 function startFlight(b,from,to,dur,arc){b.fly={from:from.clone(),to:to.clone(),t:0,dur,arc};b.state='fly';sfx('wings',from);if(b.S.big)sfx('birdCall',from,b.kind)}
 function birdUpdate(dt){const F=frog.position,shelter=birdSheltering();
  for(const b of BIRDS){b.t-=dt;b.ph+=dt;const P=b.G.position;const act=birdActive(b);
-  const home=()=>spotPos(b.homeA+(shelter?0.03:0),shelter&&!b.S.swimmer?b.homeR+2.2:b.homeR,b);
+  const home=()=>spotPos(b.homeA+(shelter?0.03:0)+(b.wade||0),shelter&&!b.S.swimmer?b.homeR+2.2:b.homeR,b);
   if(b.state==='away'){b.G.visible=false;if(act&&b.t<=0){const from=home().add(new THREE.Vector3(-Math.cos(b.homeA)*14,9,-Math.sin(b.homeA)*14));b.G.visible=true;P.copy(from);startFlight(b,from,home(),5,3)}continue}
   if(!act&&b.state!=='fly'&&b.state!=='leave'){b.state='leave';const to=P.clone().add(new THREE.Vector3(Math.cos(b.homeA)*25,12,Math.sin(b.homeA)*25));startFlight(b,P,to,6,2);b.state='leave'}
   const fd=Math.hypot(P.x-F.x,P.z-F.z);
-  if((b.state==='stand'||b.state==='forage'||b.state==='swim'||b.state==='perch')&&fd<(b.S.big?3.4:2.4)&&!shelter){   // startled by the frog
+  if((b.state==='stand'||b.state==='forage'||b.state==='swim'||b.state==='perch')&&fd<(b.S.big?3.4:2.4)&&!shelter&&!V11.calm){   // startled by the frog
    const a=b.homeA+(rB()-.5)*1.2;const out=new THREE.Vector3(Math.cos(a)*(POND_R+6),5+rB()*3,Math.sin(a)*(POND_R+6));startFlight(b,P,out,3.2,2.5);b.alarm=true;V10.events.birdFlee=(V10.events.birdFlee||0)+1}
   if(b.state==='fly'||b.state==='leave'){const f=b.fly;f.t+=dt/f.dur;const u=Math.min(1,f.t),e=u*u*(3-2*u);
    const p=f.from.clone().lerp(f.to,e);p.y+=Math.sin(Math.PI*u)*f.arc;const d=p.clone().sub(P);if(d.lengthSq()>1e-8)b.yaw=Math.atan2(d.x,d.z);P.copy(p);
-   flapSet(b,u<0.85?1:0.4,b.ph*(b.S.big?7:14));for(const l of b.legs)l.hip.rotation.x=0.9*Math.min(1,u*4);b.neckG.rotation.x=b.kind==='heron'?0.5:0.25;
-   b.G.rotation.set(-d.y*2,b.yaw,0,'YXZ');
+   // v11: real wing-beat tempo (egret / heron ~2 beats/s, grebe ~5, kingfisher ~8) and a glide on the long descent before landing
+   const glide=b.S.big&&f.dur>4&&u>0.4&&u<0.84&&f.to.y<f.from.y?1:0;b.kS=(b.kS??1)+((glide?0.06:u<0.85?1:0.55)-(b.kS??1))*Math.min(1,dt*4);
+   b.wph=(b.wph||0)+dt*(b.S.big?13:b.kind==='kingfisher'?52:34)*(glide?0.25:1);flapSet(b,b.kS,b.wph);for(const l of b.legs)l.hip.rotation.x=0.9*Math.min(1,u*4);b.neckG.rotation.x=b.kind==='heron'?0.5:0.25;
+   const dh=Math.hypot(d.x,d.z),pm=b.diving?1.25:0.55;b.G.rotation.set(dh+Math.abs(d.y)>1e-5?THREE.MathUtils.clamp(-Math.atan2(d.y,Math.max(dh,1e-4))*0.8,-pm,pm):0,b.yaw,0,'YXZ');
    if(u>=1){if(b.state==='leave'){b.state='away';b.G.visible=false;b.t=4+rB()*6;continue}
     if(b.alarm){b.alarm=false;b.homeA+=(rB()-.5)*0.8;startFlight(b,P,home(),6+rB()*4,4);continue}   // circle back and land again near the reeds
     b.state=b.S.swimmer?'swim':b.kind==='kingfisher'?'perch':'stand';b.t=2+rB()*4;b.G.rotation.set(0,b.yaw,0)}
@@ -1453,17 +1459,139 @@ function birdUpdate(dt){const F=frog.position,shelter=birdSheltering();
   if(b.state==='stand'||b.state==='forage'){if(b.t<=0){b.state=b.state==='stand'&&!shelter?'forage':'stand';b.t=2+rB()*5;b.look=(rB()-.5)*1.4}
    const fo=b.state==='forage'?1:0;const peck=fo?Math.max(0,Math.sin(b.ph*5)):0;
    b.neckG.rotation.x=fo?0.9+peck*0.35:-0.1-0.3*crouch;b.neckG.rotation.y=fo?0:(b.look||0)*Math.min(1,Math.sin(b.ph*0.7)*2);
-   b.yaw+=Math.sin(b.ph*0.3)*0.002;b.G.rotation.set(0,b.yaw,0);P.lerp(home(),Math.min(1,dt*0.5))}
-  else if(b.state==='perch'){P.y=WY+1.1;b.neckG.rotation.y=Math.sin(b.ph*0.9)*0.6;
-   if(b.t<=0&&!shelter){const dive=P.clone().add(new THREE.Vector3(-Math.cos(b.homeA)*2,0,-Math.sin(b.homeA)*2));dive.y=WY;startFlight(b,P,dive,0.9,-0.4);b.dived=true;V10.events.kingfisherDive=(V10.events.kingfisherDive||0)+1}
-   if(b.dived&&b.state==='perch'){b.dived=false;splash(P.x,P.z,0.3);const up=home();up.y=WY+1.25;startFlight(b,P,up,1.4,0.6);b.t=6+rB()*6}}
+   b.yaw+=Math.sin(b.ph*0.3)*0.002;
+   if(b.v11){if(b.kind==='egret'&&fo&&!shelter){b.wDir=b.wDir||1;b.wade=(b.wade||0)+dt*0.006*b.wDir;if(Math.abs(b.wade)>0.12)b.wDir=-Math.sign(b.wade);   // v11: slow wading along the shallows while foraging
+      const a=b.homeA+b.wade;b.yaw+=wrapA(Math.atan2(-Math.sin(a)*b.wDir,Math.cos(a)*b.wDir)-b.yaw)*Math.min(1,dt*1.5)}
+    b.alert=(b.alert||0)+((fd<6&&b.S.big&&!fo?1:0)-(b.alert||0))*Math.min(1,dt*2);b.alertYaw=THREE.MathUtils.clamp(wrapA(Math.atan2(F.x-P.x,F.z-P.z)-b.yaw),-1.1,1.1);
+    if(b.kind==='heron'){const s0=b.strike||0;b.strike=Math.max(0,s0-dt);if(b.state==='forage'&&!s0&&rB()<dt*0.2){b.strike=0.7;V11.events.heronStrike++}
+     if(s0>0.52&&b.strike<=0.52)splash(P.x+Math.sin(b.yaw)*0.55,P.z+Math.cos(b.yaw)*0.55,0.12)}}
+   b.G.rotation.set(0,b.yaw,0);P.lerp(home(),Math.min(1,dt*0.5))}
+  else if(b.state==='perch'){
+   if(b.dived){b.dived=false;b.diving=false;splash(P.x,P.z,0.3);sfx('splash',P);   // v11: the plunge really takes a fish (most of the time), carries it back to the perch, beats it and swallows it
+    const ok=!!b.prey&&(V11.kfForce!==undefined?V11.kfForce:rB()<0.8);V11.kfForce=undefined;if(ok){b.prey.visible=true;b.preyFish.scale.setScalar(0.42);V11.events.kfCatch++}else if(b.prey)V11.events.kfMiss++;
+    const up=home();up.y=WY+1.25;startFlight(b,P,up,1.4,0.6);b.t=6+rB()*6;continue}
+   P.y=WY+1.1;b.neckG.rotation.y=Math.sin(b.ph*0.9)*0.6;
+   if(b.prey&&b.prey.visible&&!(b.eatT>0))b.eatT=2.8;
+   if(b.eatT>0){b.eatT-=dt;b.t=Math.max(b.t,3);if(b.eatT<0.6)b.preyFish.scale.setScalar(0.42*Math.max(0,b.eatT/0.6));if(b.eatT<=0){b.eatT=0;b.prey.visible=false;V11.events.kfEat++}}
+   else if((b.t<=0||V11.kfForceDive)&&!shelter){V11.kfForceDive=false;const dive=P.clone().add(new THREE.Vector3(-Math.cos(b.homeA)*2,0,-Math.sin(b.homeA)*2));dive.y=WY-(b.v11?0.14:0);
+    startFlight(b,P,dive,0.9,-0.4);b.dived=true;b.diving=!!b.v11;V10.events.kingfisherDive=(V10.events.kingfisherDive||0)+1;V11.events.kfDive++}}
   else if(b.state==='swim'){const a=b.homeA+Math.sin(b.ph*0.05)*0.25;const tgt=new THREE.Vector3(Math.cos(a)*b.homeR,WY-0.02,Math.sin(a)*b.homeR);const d=tgt.clone().sub(P);
-   if(d.length()>0.05)b.yaw=Math.atan2(d.x,d.z);P.addScaledVector(d,Math.min(1,dt*0.15));P.y=WY-0.03+Math.sin(b.ph*3)*0.006;b.G.rotation.set(0,b.yaw,Math.sin(b.ph*3)*0.03);
+   if(d.length()>0.05)b.yaw=Math.atan2(d.x,d.z);P.addScaledVector(d,Math.min(1,dt*0.15));b.emerge=Math.max(0,(b.emerge||0)-dt);P.y=WY-0.03+Math.sin(b.ph*3)*0.006-b.emerge/0.35*0.04;b.G.rotation.set(0,b.yaw,Math.sin(b.ph*3)*0.03);
    b.neckG.rotation.y=Math.sin(b.ph*0.8)*0.4;
-   if(b.t<=0){b.state='dive';b.t=2.5;splash(P.x,P.z,0.25)}}
-  else if(b.state==='dive'){P.y=WY-0.5;b.G.visible=b.t<=0;if(b.t<=0){b.state='swim';b.G.visible=true;P.y=WY-0.03;b.t=6+rB()*8}}
+   if(b.t<=0){b.state='dive';b.t=2.5;splash(P.x,P.z,0.25);if(b.v11)V11.events.grebeDive++}}
+  else if(b.state==='dive'){const e=2.5-b.t;if(b.v11&&e<0.45){P.y=WY-0.03-e*0.35;b.G.visible=true;b.G.rotation.set(e*1.6,b.yaw,0)}else{P.y=WY-0.5;b.G.visible=b.t<=0}   // v11: tips forward and slips under
+   if(b.t<=0){b.state='swim';b.G.visible=true;P.y=WY-0.03;b.t=6+rB()*8;if(b.v11){b.emerge=0.35;V11.events.grebeUp++;splash(P.x,P.z,0.15)}}}
   if(b.state==='stand'&&b.S.big&&rB()<dt*0.05&&fd<14)sfx('birdCall',P,b.kind)}}
 function birdState(){return BIRDS.map(b=>({kind:b.kind,big:b.S.big,state:b.state,visible:b.G.visible,x:b.G.position.x,y:b.G.position.y,z:b.G.position.z,wing:b.wings[0].piv.rotation.z,neck:b.neckG.rotation.x,crouch:b.body.position.y}))}
+
+// ================================================================ v11 · 精细动物
+// Turtle, egret, night heron, kingfisher and little grebe are Blender-built glb models (animals/*.glb, see src/animals_gen.py + src/animals_blender.py):
+// skinned bodies with baked colour / normal / roughness maps, real feather cards (with a 'fold' morph for the wing), glossy eyes, LOD0 + LOD1.
+// The v9/v10 behaviour code is unchanged in spirit: it still writes the same light-weight control rig (neckG, wings[].piv, legs[].hip / legs[].piv, body)
+// and v11Update() turns that rig + the behaviour state into a skeleton pose every frame (animals/rig.js). ?animals=v10 shows the old procedural models.
+const V11={events:{kfDive:0,kfCatch:0,kfMiss:0,kfEat:0,heronStrike:0,egretStep:0,grebeDive:0,grebeUp:0,turtleBaskDive:0,turtleClimb:0,turtleBreath:0},calm:false,wetK:-1,scale:{egret:1.05,heron:1.15,kingfisher:1.5,grebe:1.5},
+ lod:{turtle:IS_MOBILE?3.2:5.5,egret:IS_MOBILE?6:11,heron:IS_MOBILE?6:11,kingfisher:IS_MOBILE?3:5.5,grebe:IS_MOBILE?3:5.5}};
+const rV11=(()=>{let s=1111;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296}})();
+const V11_v=new THREE.Vector3(),V11_v2=new THREE.Vector3(),V11_cam=new THREE.Vector3();
+const v11On=k=>!!(ANIM[k]&&ANIM[k].root);
+function buildTurtleV11(swimmer){const T=new THREE.Group();T.name='Turtle';const I=RIG.instance(ANIM.turtle);T.add(I.root);
+ const legs=[];for(const [sx,sz,front] of [[1,1,1],[-1,1,1],[1,-1,0],[-1,-1,0]])legs.push({piv:new THREE.Group(),sx,sz,front});
+ const scale=swimmer?1.15:1.35;T.scale.setScalar(scale);
+ return{T,neck:new THREE.Group(),legs,swimmer,scale,heading:r9()*6.28,phase:0,tgt:new THREE.Vector3(),tT:0,scared:0,retract:0,speed:0,I,v11:true,breath:0,splay:0}}
+function buildBirdV11(kind){const S=BIRD_SPEC[kind],G=new THREE.Group();G.name='Bird_'+kind;const I=RIG.instance(ANIM[kind]);const mdl=new THREE.Group();mdl.add(I.root);G.add(mdl);
+ I.root.scale.setScalar(V11.scale[kind]);if(kind==='grebe')mdl.position.y=-0.05;
+ if(kind==='heron'){const e=I.eyes[0];e.material=e.material.clone();e.material.emissive.setRGB(1,0.16,0.06);e.material.emissiveIntensity=0;   // night-heron eyeshine (tapetum): only the pupil glows in the lamp beam
+  e.material.onBeforeCompile=sh=>{sh.fragmentShader=sh.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance*=step(vColor.r+vColor.g+vColor.b,0.1);')}}
+ const wings=[{piv:new THREE.Group(),sx:1},{piv:new THREE.Group(),sx:-1}],legs=kind==='grebe'?[]:[{hip:new THREE.Group(),sx:1},{hip:new THREE.Group(),sx:-1}];
+ const b={kind,S,G,neckG:new THREE.Group(),head:new THREE.Group(),wings,legs,body:new THREE.Group(),legLen:0,I,mdl,v11:true,foldV:1,kS:1,wph:0,ret:0,ext:0,lastP:new THREE.Vector3(),stepPh:0,walk:0};
+ if(kind==='kingfisher'){const fish=new THREE.Mesh(fishGeometry(FISH_SPECIES[1]),new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.3,metalness:0.25,envMapIntensity:1.4,side:THREE.DoubleSide}));
+  fish.scale.setScalar(0.42);const prey=new THREE.Group();prey.add(fish);prey.visible=false;b.prey=prey;b.preyFish=fish;
+  RIG.attach(I,'head',prey,new THREE.Vector3(0,0.137,0.128),new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),Math.PI/2))}   // held crosswise in the bill
+ return b}
+// lily-pad baskers: turtles that sun themselves on a pad, slide into the water when the frog comes, swim off, come back and climb up again
+function addBaskers(){const pads=IS_MOBILE?[7]:[7,8];
+ for(const i of pads){const pad=PADS[i];if(!pad)continue;const t=buildTurtle(true);t.basker={pad,state:'pad',t:0,a:rV11()*6.28,r:0.12+rV11()*0.1,dir:new THREE.Vector3(1,0,0),from:new THREE.Vector3()};
+  t.heading=rV11()*6.28;t.T.position.set(pad.grp.position.x,pad.top(),pad.grp.position.z);t.home=new THREE.Vector3(pad.x,0,pad.z);t.ph0=rV11()*6.28;t.surf={state:'swim',t:99};scene.add(t.T);V9.turtles.push(t)}}
+function baskerUpdate(t,dt){const B=t.basker,P=t.T.position,F=frog.position,pad=B.pad,pg=pad.grp.position;const fd=Math.hypot(P.x-F.x,P.z-F.z)+Math.abs(P.y-F.y)*0.5;
+ B.t-=dt;t.phase+=dt*(0.6+t.speed*14);const ph=t.phase;let pitch=0,crawl=0,paddle=0;
+ const spotX=pg.x+Math.sin(B.a)*B.r,spotZ=pg.z+Math.cos(B.a)*B.r,top=pad.top()+0.004;
+ const steer=(gx,gz,rate)=>{const d=wrapA(Math.atan2(gx-P.x,gz-P.z)-t.heading);t.heading+=THREE.MathUtils.clamp(d,-rate*dt,rate*dt)};
+ if(B.state==='pad'){P.set(spotX,top,spotZ);t.speed=0;t.heading+=Math.sin(V9.t*0.05+t.ph0)*0.0005;
+  t.neck.rotation.set(0,Math.sin(V9.t*0.21+t.ph0)*0.45,0);t.splay+=(1-t.splay)*Math.min(1,dt*2);t.breath+=(0.6-t.breath)*Math.min(1,dt*2);
+  if(fd<2.2||B.force){B.force=false;B.state='slide';B.t=0.9;B.from.copy(P);B.dir.set(P.x-pg.x,0,P.z-pg.z);if(B.dir.lengthSq()<1e-4)B.dir.set(Math.sin(t.heading),0,Math.cos(t.heading));B.dir.normalize();
+   const away=V11_v.set(P.x-F.x,0,P.z-F.z);if(away.lengthSq()>1e-4&&away.normalize().dot(B.dir)<0.2)B.dir.copy(away);B.dir.normalize()}}       // slide off the side away from the frog
+ else if(B.state==='slide'){const u=1-Math.max(0,B.t)/0.9,run=pad.r-B.r+0.45;t.heading+=wrapA(Math.atan2(B.dir.x,B.dir.z)-t.heading)*Math.min(1,dt*8);
+  P.set(B.from.x+B.dir.x*run*u,lerp(top,WY-0.32,u*u),B.from.z+B.dir.z*run*u);pitch=0.45*u;crawl=1;t.splay*=0.9;t.breath*=0.9;t.neck.rotation.set(0.15,0,0);
+  if(B.t<=0){splash(P.x,P.z,0.55);sfx('turtle',P);V10.events.turtleDive++;V11.events.turtleBaskDive++;B.state='swim';B.t=9+rV11()*6}}
+ else if(B.state==='swim'||B.state==='return'){const ret=B.state==='return';const gx=ret?pg.x+B.dir.x*(pad.r+0.3):pg.x+B.dir.x*3.6,gz=ret?pg.z+B.dir.z*(pad.r+0.3):pg.z+B.dir.z*3.6,gy=ret?WY-0.22:-0.75;
+  steer(gx,gz,1.2);t.speed+=((ret?0.16:0.22)-t.speed)*Math.min(1,dt*2);P.x+=Math.sin(t.heading)*t.speed*dt;P.z+=Math.cos(t.heading)*t.speed*dt;P.y+=(gy-P.y)*Math.min(1,dt*0.9);clampWater(P,0.12);
+  paddle=1;pitch=THREE.MathUtils.clamp((P.y-gy)*0.5,-0.4,0.4);t.neck.rotation.set(0,Math.sin(ph*0.37)*0.2,0);
+  if(!ret&&B.t<=0&&fd>3.2)B.state='return';
+  if(ret&&Math.hypot(gx-P.x,gz-P.z)<0.3){if(fd>3.2){B.state='climb';B.t=1.6;B.from.copy(P)}else{B.state='swim';B.t=5}}}
+ else if(B.state==='climb'){const u=1-Math.max(0,B.t)/1.6,e=u*u*(3-2*u);steer(spotX,spotZ,3);
+  P.set(lerp(B.from.x,spotX,e),lerp(B.from.y,top,Math.min(1,u*1.6)),lerp(B.from.z,spotZ,e));pitch=-0.35*Math.sin(Math.PI*Math.min(1,u*1.3));crawl=1;t.speed=0.05;
+  if(B.t<=0){B.state='pad';V11.events.turtleClimb++;splash(P.x,P.z,0.2)}}
+ // limbs: diagonal pairs (front-left with hind-right) for crawling and paddling
+ for(const l of t.legs){const o=(l.sx*l.sz>0)?0:Math.PI;
+  if(paddle){const s=Math.sin(ph*1.4+o);l.piv.rotation.set(0,(l.front?0.85:0.5)*s*l.sx,(l.front?0.3:0.18)*Math.cos(ph*1.4+o)*l.sx)}
+  else if(crawl){const s=Math.sin(ph*2+o);l.piv.rotation.set(0,0.55*s*l.sx,Math.max(0,Math.cos(ph*2+o))*0.22*l.sx)}else l.piv.rotation.set(0,0,0)}
+ t.retract+=(0-t.retract)*Math.min(1,dt*6);t.scared=0;t.T.rotation.set(pitch+(paddle?Math.sin(ph*1.4)*0.04:0),t.heading,0,'YXZ')}
+// ---- per-frame: control rig -> skeleton pose, LOD, wet look, eyeshine
+function birdPoseV11(b,dt,L){const I=b.I,k=b.kind,big=b.S.big,fl=(b.state==='fly'||b.state==='leave')&&b.G.visible;const P={neck:{},legs:[{},{}]};
+ const sc=V11.scale[k];
+ b.foldV+=((fl&&!b.diving?0:1)-b.foldV)*Math.min(1,dt*(fl?9:4));P.fold=b.foldV;
+ if(fl){const u=b.fly?Math.min(1,b.fly.t):1,ph=b.wph,K=b.kS;
+  P.wing={a:b.wingA??0.2,f:0.32*Math.sin(ph-0.7)*K+0.06,h:0.38*Math.sin(ph-1.25)*K-0.04,sweep:0.55*Math.max(0,-Math.cos(ph))*K,fwd:0.12*Math.sin(ph)*K};
+  if(b.diving){P.wing={a:-0.35,f:-0.2,h:-0.2,sweep:0.6};P.fold=0.55}
+  P.neck.ret=big?1:0.15;P.neck.pitch=big?-0.1:0;
+  const land=b.state==='fly'&&!b.alarm&&b.fly&&b.fly.to.y<WY+1.5;
+  P.trail=Math.min(1,u*5)*(land&&u>0.86?Math.max(0,1-(u-0.86)/0.06):1);P.reach=land&&u>0.86?Math.min(1,(u-0.86)/0.07):0;
+  if(k==='grebe'){P.trail=0;P.reach=0}
+  b.mdl.position.y=k==='grebe'?-0.05:0}
+ else{const c=THREE.MathUtils.clamp(-b.body.position.y/0.05,0,1);b.crouchV=(b.crouchV||0)+(c-(b.crouchV||0))*Math.min(1,dt*3);const cv=b.crouchV;
+  let ret=cv*0.6,ext=0,pitch=b.neckG.rotation.x,yaw=b.neckG.rotation.y,bodyPitch=0;
+  if(k==='egret'){const fo=THREE.MathUtils.clamp((pitch-0.2)/0.7,0,1);bodyPitch=0.42*fo;ext=0.55*fo;pitch=pitch*1.15;
+   if(b.alert>0){ext=Math.max(ext,0.45*b.alert);yaw=b.alertYaw||yaw}}                                            // neck stretched up when the frog is near
+  else if(k==='heron'){ret=Math.max(ret,0.85);pitch=0.12;yaw=b.alert>0.3?(b.alertYaw||0)*0.8:b.neckG.rotation.y*0.6;const s=b.strike||0;      // hunched, neck pulled in; ambush strike
+   if(s>0){const u=1-s/0.7,e=u<0.25?u/0.25:Math.max(0,1-(u-0.25)/0.75);ext=1.2*e;ret=0.85*(1-e);pitch=0.12+0.8*e;bodyPitch=0.25*e}
+   cv>0.01||(P.crouch=0.35)}
+  else if(k==='kingfisher'){pitch=(b.state==='perch'?0.12+0.1*Math.max(0,Math.sin(b.ph*2.2))**8:0);P.tail=b.state==='perch'?-0.5*Math.max(0,Math.sin(b.ph*1.3+1))**12:0;   // bob + tail flick
+   if(b.eatT>0){const w=Math.sin(b.eatT*9);yaw=w*0.9;P.neck.roll=w*0.3}}
+  else if(k==='grebe'){pitch=0.1+Math.sin(b.ph*1.7)*0.05;if(b.state==='dive'){bodyPitch=0.5}}
+  P.neck.ret=ret;P.neck.ext=ext;P.neck.pitch=pitch;P.neck.yaw=yaw;P.bodyPitch=bodyPitch;P.crouch=Math.max(P.crouch||0,cv*0.8);
+  // wading steps: the legs swing in turn while the bird moves
+  const sp=V11_v.copy(b.G.position).sub(b.lastP).setY(0).length()/Math.max(dt,1e-3);b.walk+=((sp>0.02?1:0)-b.walk)*Math.min(1,dt*4);
+  if(b.legs.length&&b.walk>0.02){b.stepPh+=dt*(big?3.2:6);for(let i=0;i<2;i++){const s=Math.sin(b.stepPh+i*Math.PI);P.legs[i]={swing:-0.32*s*b.walk,bend:0.7*Math.max(0,s)*b.walk}}
+   const st=Math.floor(b.stepPh/Math.PI);if(st!==b.stepN){b.stepN=st;if(k==='egret')V11.events.egretStep++}}
+  b.mdl.position.y=(k==='grebe'?-0.05:0)-P.crouch*(big?0.1:0.01)*sc}
+ b.lastP.copy(b.G.position);
+ RIG.poseBird(I,P);
+ if(k==='heron'){const e=I.eyes[0].material;let lit=0;if(L&&b.G.visible){I.root.updateMatrixWorld(true);RIG.bone(I,'head').getWorldPosition(V11_v2);lit=inBeam(V11_v2,L)?1:0}b.shine=(b.shine||0)+(lit-(b.shine||0))*Math.min(1,dt*6);e.emissiveIntensity=2.2*b.shine}
+ if(b.prey&&b.prey.visible)b.preyFish.rotation.y=b.eatT>0&&b.eatT<0.9?-Math.PI/2*Math.min(1,(0.9-b.eatT)/0.3):Math.sin(V9.t*(b.eatT>0?4:14))*0.35}   // wriggles; turned head-first before it is swallowed
+function turtlePoseV11(t,dt){const want=t.basker?(t.basker.state==='pad'?0.6:0):(t.surf&&t.surf.state==='bask'?1:0);if(!t.basker)t.breath+=(want-t.breath)*Math.min(1,dt*2);
+ const moving=t.speed>0.01;
+ RIG.poseTurtle(t.I,{ret:t.retract,splay:t.splay||0,neck:{pitch:t.neck.rotation.x-0.6*t.breath,yaw:t.neck.rotation.y},legs:t.legs.map(l=>({swing:l.piv.rotation.y,lift:l.piv.rotation.z,bend:-0.5*l.piv.rotation.y})),
+  tail:Math.sin(t.phase*0.9)*(moving?0.25:0.05)})}
+// the kingfisher's perch: a bare twig standing out of the water at its home spot (it used to sit on thin air)
+function kfPerch(b){const want=spotPos(b.homeA,b.homeR,b);if(!b.perch){const c=new THREE.CatmullRomCurve3([new THREE.Vector3(0,FLOOR_Y-WY,0),new THREE.Vector3(0.05,0.3,0.02),new THREE.Vector3(0.02,0.85,-0.02),new THREE.Vector3(-0.03,1.06,0),new THREE.Vector3(0.0,1.1,0.0)]);
+  const m=new THREE.MeshStandardMaterial({color:0x5a4a36,roughness:0.85});const g=new THREE.Group();g.add(new THREE.Mesh(new THREE.TubeGeometry(c,24,0.012,6,false),m));
+  const tw=new THREE.Mesh(new THREE.CylinderGeometry(0.006,0.011,0.32,5),m);tw.position.set(0.0,1.098,0);tw.rotation.z=Math.PI/2*0.96;g.add(tw);
+  const sp=new THREE.Mesh(new THREE.CylinderGeometry(0.003,0.007,0.22,5),m);sp.position.set(0.07,0.92,0);sp.rotation.z=-0.7;g.add(sp);
+  g.traverse(o=>{if(o.isMesh){o.castShadow=!IS_MOBILE;o.receiveShadow=true}});g.name='KingfisherPerch';scene.add(g);b.perch=g}
+ b.perch.position.set(want.x,WY,want.z);b.perch.rotation.y=b.homeA}
+function v11Update(dt){if(!V9.ready)return;const L=lampInfo();camera.getWorldPosition(V11_cam);
+ for(const b of BIRDS)if(b.kind==='kingfisher'&&b.v11)kfPerch(b);
+ for(const t of V9.turtles){if(!t.v11)continue;turtlePoseV11(t,dt);RIG.setLod(t.I,t.T.position.distanceTo(V11_cam)<V11.lod.turtle*t.scale/1.15?0:1)}
+ for(const b of BIRDS){if(!b.v11)continue;if(b.G.visible){birdPoseV11(b,dt,L);RIG.setLod(b.I,b.G.position.distanceTo(V11_cam)<V11.lod[b.kind]?0:1)}else b.lastP.copy(b.G.position)}
+ const WW=ATMO.wW,w=Math.min(1,WW.rain+WW.storm+WW.snow*0.3);if(Math.abs(w-V11.wetK)>0.02){V11.wetK=w;for(const k of RIG.KINDS)if(v11On(k))RIG.wetness(ANIM[k],w)}}
+function v11State(){const lod={};for(const b of BIRDS)if(b.v11){lod[b.kind]=lod[b.kind]||[0,0];lod[b.kind][b.I.lod]++}lod.turtle=[0,0];for(const t of V9.turtles)if(t.v11)lod.turtle[t.I.lod]++;
+ const hp=(I,n)=>{const v=new THREE.Vector3();RIG.bone(I,n).getWorldPosition(v);return v.toArray()};
+ return{loaded:Object.fromEntries(RIG.KINDS.map(k=>[k,v11On(k)])),errors:Object.fromEntries(RIG.KINDS.filter(k=>ANIM[k]&&ANIM[k].error).map(k=>[k,ANIM[k].error])),
+  info:Object.fromEntries(RIG.KINDS.filter(v11On).map(k=>[k,{...ANIM[k].info,textures:Object.keys(ANIM[k].info.textures)}])),events:{...V11.events},lod,lodDist:V11.lod,wet:V11.wetK,
+  birds:BIRDS.map(b=>({kind:b.kind,v11:!!b.v11,state:b.state,visible:b.G.visible,fold:b.foldV,head:b.v11?hp(b.I,'head'):null,wingBone:b.v11?hp(b.I,'hand.L'):null,prey:!!(b.prey&&b.prey.visible),eatT:b.eatT||0,
+   shine:b.shine||0,strike:b.strike||0,walk:b.walk||0,lod:b.v11?b.I.lod:-1,x:b.G.position.x,y:b.G.position.y,z:b.G.position.z})),
+  turtles:V9.turtles.map(t=>({v11:!!t.v11,basker:t.basker?t.basker.state:null,surf:t.surf?t.surf.state:null,retract:t.retract,breath:t.breath||0,head:t.v11?hp(t.I,'head'):null,foot:t.v11?hp(t.I,'fl_ft.L'):null,
+   lod:t.v11?t.I.lod:-1,x:t.T.position.x,y:t.T.position.y,z:t.T.position.z,pitch:t.T.rotation.x}))}}
 
 // ---------- UI misc
 document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.id===b.dataset.p));$('#panel').classList.remove('min')});
@@ -1539,7 +1667,10 @@ function tick(){requestAnimationFrame(tick);const rawDt=clock.getDelta(),dt=Math
  }
  if(V9.lamp)syncLamp();if(controls.enabled)controls.update();renderer.render(scene,camera)}
 tick();
-window.__pond={v10:()=>v10State(),birdModels:()=>BIRDS.map(b=>{const t=[];let n=0;b.G.traverse(o=>{if(o.isMesh){n++;t.push(o.geometry.type)}});return{kind:b.kind,meshes:n,types:t}}),treeProbe:()=>{const out=[],M=new THREE.Matrix4(),p=new THREE.Vector3();scene.traverse(o=>{if(o.name!=='MetasequoiaTrunks')return;
+window.__pond={v10:()=>v10State(),birdModels:()=>BIRDS.map(b=>{const t=[];let n=0,sk=0,tris=0;b.G.traverse(o=>{if(o.isMesh){n++;t.push(o.geometry.type);if(o.isSkinnedMesh)sk++;tris+=o.geometry.index?o.geometry.index.count/3:0}});return{kind:b.kind,meshes:n,types:t,v11:!!b.v11,skinned:sk,tris}}),
+ v11:()=>v11State(),v11Calm:on=>{V11.calm=on},heronStrike:i=>{const b=BIRDS[i];if(b&&b.kind==='heron'){b.strike=0.7;V11.events.heronStrike++}},kfDive:catchIt=>{V11.kfForceDive=true;V11.kfForce=catchIt!==false},baskDive:i=>{const t=V9.turtles.filter(t=>t.basker)[i||0];if(t)t.basker.force=true;return t?V9.turtles.indexOf(t):-1},
+ birdHome:(i,x,z,yaw)=>{const b=BIRDS[i];b.homeA=Math.atan2(z,x);b.homeR=Math.hypot(x,z);b.wade=0;if(b.state!=='away'&&b.state!=='fly'){b.G.position.copy(spotPos(b.homeA,b.homeR,b));if(b.kind==='kingfisher')b.G.position.y=WY+1.1}if(yaw!==undefined)b.yaw=yaw},
+ turtleHome:(i,x,z,heading)=>{const t=V9.turtles[i];t.home.set(x,0,z);t.T.position.x=x;t.T.position.z=z;t.tgt.set(x,0,z);t.tT=30;if(heading!==undefined)t.heading=heading},treeProbe:()=>{const out=[],M=new THREE.Matrix4(),p=new THREE.Vector3();scene.traverse(o=>{if(o.name!=='MetasequoiaTrunks')return;
   for(let i=0;i<o.count;i++){o.getMatrixAt(i,M);p.setFromMatrixPosition(M);const s=new THREE.Vector3().setFromMatrixScale(M).y;const c=p.clone().add(new THREE.Vector3(0,6.5*s,0)).project(camera);
    if(Math.abs(c.x)<0.95&&Math.abs(c.y)<0.95&&c.z<1){const top=p.clone().add(new THREE.Vector3(0,14*s,0)).project(camera);out.push({x:(c.x+1)/2*innerWidth,y:(1-c.y)/2*innerHeight,skyY:(1-Math.min(0.98,top.y+0.12))/2*innerHeight,dist:p.distanceTo(camera.position)})}}});
   const mats=[];scene.traverse(o=>{if(o.isInstancedMesh&&/Reed|Cattail|Willow|Metasequoia|Shrub/.test(o.name))mats.push(!!o.material.userData.silhouetteFog)});return{trees:out,silhouette:mats.length>0&&mats.every(Boolean)}},mmLayer:id=>setMinimapLayer(id,true),audio:()=>audioState(),camMode:m=>setCamMode(m,true),camYaw:a=>{CAM.yaw=a;CAM.snap=true},flashHold:on=>{V10.flashHold=on},forceBolt:on=>{V10.forceBolt=on;ATMO.nextBolt=0.3},
